@@ -131,13 +131,12 @@ VITE_AUTH_GUARD=false                        # 开发期跳过登录守卫
    集中在 `apps/match/src/services/project.ts`，接口就绪后只改这一个文件。
 2. **`CreatedResume` 只有表单骨架**，没有提交接口（后端也没有简历接口）。
 3. **`DetailPage` 是空列表**，等 `/mms/project/list`。
-4. **首页学科树需要登录才看得到。** `/api/cms/subject/tree` 不在网关白名单里
-   （白名单只有 `/api/auth/**`），未登录访问会 401。
-   学科树是公开字典数据，建议后端把它加进白名单，见
-   `../dev-manual/06-鉴权与会话.md` 第 8 节。
-5. **测试覆盖率仍然低。** 目前 3 个包共 28 个用例，集中在纯逻辑和 store。
+4. **测试覆盖率仍然低。** 目前 3 个包共 28 个用例，集中在纯逻辑和 store。
    优先补纯函数和 store 的 action，见 `../dev-manual/08-质量门禁.md`。
-6. **还没有 CI。** 建议的流水线写在 `../dev-manual/08-质量门禁.md` 第 6 节。
+5. **还没有 CI。** 建议的流水线写在 `../dev-manual/08-质量门禁.md` 第 6 节。
+
+> 首页学科树原本因为不在网关白名单里而 401，已修复
+> （`/api/cms/subject/tree` 已加进白名单），见 `../dev-manual/06-鉴权与会话.md` 第 8 节。
 
 ---
 
