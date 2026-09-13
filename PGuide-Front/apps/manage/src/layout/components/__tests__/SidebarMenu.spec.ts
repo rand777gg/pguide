@@ -160,4 +160,43 @@ describe('SidebarMenu', () => {
     // constantRoutes 里 path 为 '/' 的那条会一并显示
     expect(wrapper.text()).toContain('首页')
   })
+
+  it('外链菜单渲染成新窗口打开的 <a>，而不是站内跳转', async () => {
+    // 对应后端返回的「若依官网」：path 是 http 地址，路由表里只有 /external/... 占位
+    const wrapper = await mountSidebar([
+      route('/external/ruoyi-vip', '若依官网', undefined, {
+        external: true,
+        link: 'http://ruoyi.vip',
+        icon: 'guide',
+      }),
+    ])
+
+    const link = wrapper.find('a.sidebar-item__link')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toBe('http://ruoyi.vip')
+    expect(link.attributes('target')).toBe('_blank')
+    // noopener 不能少：外链页面不该能通过 window.opener 反向操作后台
+    expect(link.attributes('rel')).toContain('noopener')
+    expect(link.text()).toContain('若依官网')
+  })
+
+  it('普通菜单不会渲染成 <a>', async () => {
+    const wrapper = await mountSidebar([route('/system/user', '用户管理')])
+
+    expect(wrapper.find('a.sidebar-item__link').exists()).toBe(false)
+  })
+
+  it('hidden 的顶层路由不进菜单（对应菜单管理里的「停用/隐藏」）', async () => {
+    const wrapper = await mountSidebar([
+      route('/system', '系统管理', [route('/system/user', '用户管理')]),
+      route('/external/ruoyi-vip', '若依官网', undefined, {
+        external: true,
+        link: 'http://ruoyi.vip',
+        hidden: true,
+      }),
+    ])
+
+    expect(wrapper.text()).toContain('用户管理')
+    expect(wrapper.text()).not.toContain('若依官网')
+  })
 })

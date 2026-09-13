@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildRoutes, resolveComponent, isExternalLink, viewName } from '../dynamic-route'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import {
+  buildRoutes,
+  resolveComponent,
+  isExternalLink,
+  viewName,
+  externalRoutePath,
+} from '../dynamic-route'
 import type { DynamicRoute } from '@/api'
 
 /**
@@ -240,6 +247,62 @@ describe('组件缺失时的日志', () => {
 
     error.mockRestore()
     warn.mockRestore()
+  })
+})
+
+/**
+ * 外链菜单。
+ *
+ * RuoYi 基线里有一条「若依官网」（menu_id=4），它的 path 就是 `http://ruoyi.vip`。
+ * vue-router 4 对**顶层**路由强制要求 path 以 `/` 开头，直接 addRoute 会抛：
+ *
+ *   Route paths should start with a "/": "http://ruoyi.vip" should be "/http://ruoyi.vip"
+ *
+ * 这个异常出在路由守卫的 generateRoutes() 里 → catch 之后清会话回登录页，
+ * 现象就是「密码没错但登不进去」。所以这里除了断言转换结果，还要**真的建一个
+ * router 把路由加进去** —— 这才是能复现该 bug 的断言。
+ */
+describe('外链菜单', () => {
+  /** 与真实 /getRouters 返回一致的一条外链菜单（若依官网） */
+  const EXTERNAL_MENU: DynamicRoute = {
+    name: 'Http://ruoyi.vip',
+    path: 'http://ruoyi.vip',
+    hidden: false,
+    component: 'Layout',
+    meta: { title: '若依官网', icon: 'guide', noCache: false, link: 'http://ruoyi.vip' },
+  }
+
+  it('externalRoutePath 把 URL 变成站内安全路径', () => {
+    expect(externalRoutePath('http://ruoyi.vip')).toBe('/external/ruoyi-vip')
+    expect(externalRoutePath('https://example.com/docs?x=1')).toBe('/external/example-com-docs-x-1')
+  })
+
+  it('外链不拿真实 URL 当路由 path，真实地址放在 meta.link', () => {
+    const [route] = buildRoutes([EXTERNAL_MENU])
+
+    expect(route!.path).toBe('/external/ruoyi-vip')
+    expect(route!.meta?.external).toBe(true)
+    expect(route!.meta?.link).toBe('http://ruoyi.vip')
+    // 后端从 URL 拼出来的 name（Http://ruoyi.vip）不该进路由表
+    expect(route!.name).toBeUndefined()
+  })
+
+  it('转换出来的路由能真的加进 router —— 这条就是守住那个崩溃', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+
+    const routes = buildRoutes([REAL_DIRECTORY, EXTERNAL_MENU])
+
+    expect(() => routes.forEach((route) => router.addRoute(route))).not.toThrow()
+    // 顺带确认真的注册上了（占位路径能匹配到）
+    expect(router.resolve('/external/ruoyi-vip').matched.length).toBeGreaterThan(0)
+  })
+
+  it('path 少写 / 的脏数据也不会让登录炸掉（补成合法路径）', () => {
+    const [route] = buildRoutes([
+      { name: 'Bad', path: 'system/user', component: 'system/user/index' },
+    ])
+
+    expect(route!.path).toBe('/system/user')
   })
 })
 

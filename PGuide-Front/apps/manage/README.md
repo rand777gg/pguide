@@ -180,6 +180,41 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
      → 侧边栏直接遍历这份路由渲染
 ```
 
+### 外链菜单（`http://ruoyi.vip` 那一类）
+
+RuoYi 基线里有一条外链菜单「若依官网」，它的 `sys_menu.path` **直接就是
+`http://ruoyi.vip`**。这条数据一度让**登录直接进不去**：
+
+```
+Route paths should start with a "/": "http://ruoyi.vip" should be "/http://ruoyi.vip"
+```
+
+vue-router 4 要求顶层路由的 path 以 `/` 开头，`router.addRoute()` 直接抛；
+异常出在路由守卫的 `generateRoutes()` 里 → 被 catch 后清会话回登录页 ——
+用户看到的现象是「密码没错就是登不进去」，控制台只有一行日志。
+
+处理方式：
+
+- `buildRoutes` 把外链转成 `/external/<slug>` 的安全路径，真实地址放 `meta.link`
+  （见 `utils/dynamic-route.ts` 的 `externalRoutePath`）
+- 侧边栏按 `meta.link` 渲染成 `<a target="_blank" rel="noopener">`，不做站内跳转
+- 顺手兜了一层 `ensureAbsolutePath`：后端菜单少写一个 `/` 也只是页面 404，
+  不会再把整个登录干掉
+- 路由守卫的 catch 现在会 `ElMessage.error` 把原因显示出来 ——
+  这类失败不该再表现成「静默回到登录页」
+
+另外把「若依官网」这条菜单在本地环境里隐藏了（`visible = '1'`，
+见 `docker/init/95-pguide-manage-menus.sql`）。它是框架作者的门户站外链，
+跟本项目无关；想留着自己参考就把那句话改回 `'0'`。
+
+### 菜单的显示与隐藏
+
+`sys_menu.visible = '1'` 对应路由 meta 上的 `hidden: true`：
+
+- 路由**照常注册**（直接敲 URL 还能访问）
+- 侧边栏不显示 —— 顶层和子级都要过滤，只过滤子级会变成
+  「在菜单管理里停用了，侧边栏还在」（`SidebarMenu.vue` 里踩过这个）
+
 ### 组件找不到时不会静默白屏
 
 老 `ruoyi-ui` 的 `loadView` 找不到组件就返回 `undefined`，页面白屏且没有线索。

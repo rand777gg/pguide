@@ -21,9 +21,17 @@ const staticMenuRoutes = computed(() =>
   constantRoutes.filter((route) => route.path === '/' && !route.meta?.hidden),
 )
 
+/**
+ * 要渲染的顶级菜单。
+ *
+ * `meta.hidden` 的路由**不显示但要保留**（比如被停用的菜单、外链菜单，
+ * 或者是别的菜单的父级）—— 这与 RuoYi 的 `sys_menu.visible = 1`（隐藏）对应。
+ * 注意这里必须过滤**顶层**：子级由 SidebarItem 过滤，漏了顶层就会出现
+ * 「在菜单管理里停用了，侧边栏还在」。
+ */
 const menuRoutes = computed<RouteRecordRaw[]>(() => [
   ...staticMenuRoutes.value,
-  ...permissionStore.dynamicRoutes,
+  ...permissionStore.dynamicRoutes.filter((route) => !route.meta?.hidden),
 ])
 </script>
 

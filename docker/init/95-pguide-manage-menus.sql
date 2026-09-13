@@ -154,3 +154,20 @@ UPDATE `sys_menu` SET `perms` = 'project:info:query'        WHERE `menu_id` = 20
 UPDATE `sys_menu` SET `perms` = 'project:info:add'          WHERE `menu_id` = 2062;
 UPDATE `sys_menu` SET `perms` = 'project:info:edit'         WHERE `menu_id` = 2063;
 UPDATE `sys_menu` SET `perms` = 'project:info:remove'       WHERE `menu_id` = 2064;
+
+-- ------------------------------------------------------------
+-- 隐藏 RuoYi 自带的外链菜单「若依官网」（menu_id = 4）
+--
+-- 它是框架作者的门户站外链（`path` 直接就是 `http://ruoyi.vip`），
+-- 跟本项目无关，留在侧边栏里只会让人问「为什么还有 ruoyi 的」。
+--
+-- 顺带说明：正是这条菜单的 path 让 vue-router 抛过
+-- `Route paths should start with a "/"` —— 于是「密码没错但登不进去」。
+-- 前端已经能正确处理外链菜单了（见 apps/manage/src/utils/dynamic-route.ts
+-- 的 externalRoutePath），这里只是把它从菜单里摘掉。
+--
+-- `visible = '1'` 表示隐藏（RuoYi 的字段语义就是这个），路由仍然存在，
+-- 只是侧边栏不显示。想恢复成显示（比如留着当参考）就改成 '0'：
+--   UPDATE sys_menu SET visible = '0' WHERE menu_id = 4;
+-- ------------------------------------------------------------
+UPDATE `sys_menu` SET `visible` = '1' WHERE `menu_id` = 4;
