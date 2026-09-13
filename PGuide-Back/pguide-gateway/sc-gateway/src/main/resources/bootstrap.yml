@@ -55,4 +55,25 @@ spring:
 pguide:
   gateway:
     authentication:
-      url: /api/auth/login,/api/auth/**
+      # 免登录白名单，逗号分隔。
+      #
+      # 匹配规则：由 GlobalJWTFilter 读出后按逗号切分，逐个交给
+      # PathUtil.checkAuthKeyValue → hutool 的 AntPathMatcher，
+      # 所以支持 ** 和 * 通配（不是简单的字符串前缀比较）。
+      #
+      # 命中白名单的请求会被注入权限头 `*:*` 后直接放行；
+      # 其余请求一律要求 token，缺失就返回 401。
+      #
+      # 判断某个接口该不该进来，标准很简单：
+      # **用户在登录之前需不需要看到它？** 需要就加进来。
+      #
+      # 现状：
+      #   /api/auth/login        登录本身当然不能要求先登录
+      #   /api/auth/**           验证码、鉴权中心跳转、token 换取等
+      #   /api/cms/subject/tree  学科分类树，首页登录前就要展示的公开字典数据
+      #                          （对应 CMSMatchUiSubjectController，
+      #                            该 controller 下只有这一个只读接口）
+      #
+      # 后续要放公开的浏览型接口（竞赛列表等），在这里追加，或者
+      # 用通配写法一次覆盖，例如 /api/cms/subject/**
+      url: /api/auth/login,/api/auth/**,/api/cms/subject/tree

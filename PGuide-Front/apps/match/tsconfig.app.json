@@ -1,0 +1,50 @@
+{
+  "include": [
+    "env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ],
+  // 刻意**不**排除 src/**/__tests__/*。
+  //
+  // 试过单独建 tsconfig.vitest.json（create-vue 的做法），但那份配置是 composite
+  // project，TS 要求把被导入的所有文件都列进 include —— 测试里 import 了
+  // src/services/subject.ts，就得再把整个 src 列一遍，两个 project 覆盖同一批文件
+  // 反而更绕。直接并入这里最简单，而且测试代码也会被类型检查覆盖（这是好事）。
+  //
+  // 测试文件不会被 Vite 打进产物：它只打包从入口可达的模块。
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
+
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "types": ["vite/client"],
+    "noEmit": true
+  }
+}
