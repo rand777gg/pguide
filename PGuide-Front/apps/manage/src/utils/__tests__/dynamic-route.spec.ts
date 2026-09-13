@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildRoutes, resolveComponent, isExternalLink } from '../dynamic-route'
+import { buildRoutes, resolveComponent, isExternalLink, viewName } from '../dynamic-route'
 import type { DynamicRoute } from '@/api'
 
 /**
@@ -121,5 +121,59 @@ describe('buildRoutes', () => {
   it('空路径的节点被跳过，不产生脏路由', () => {
     const routes = buildRoutes([{ path: '', component: undefined } as DynamicRoute])
     expect(routes).toHaveLength(0)
+  })
+})
+
+/**
+ * 组件名（TagsView 的 keep-alive 缓存靠它匹配）。
+ *
+ * 这里值得单独测：`<script setup>` 的组件名默认从**文件名**推断，
+ * 而我们的页面全叫 index.vue —— 不显式改名字的话 keep-alive 一个都缓存不住，
+ * 而且不会报任何错（只会表现为「切回来查询条件没了」）。
+ */
+describe('viewName 与组件命名', () => {
+  it('组件路径转成 PascalCase 组件名', () => {
+    expect(viewName('system/user/index')).toBe('SystemUser')
+    expect(viewName('mms/project/index')).toBe('MmsProject')
+    expect(viewName('monitor/logininfor/index')).toBe('MonitorLogininfor')
+    expect(viewName('usercenter/student/index')).toBe('UsercenterStudent')
+  })
+
+  it('连字符目录也按段大写', () => {
+    expect(viewName('user-center/info/index')).toBe('UserCenterInfo')
+  })
+
+  it('真实页面在解析时就带上组件名', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const result = resolveComponent('system/user/index', '/system/user')
+
+    expect(result.missing).toBe(false)
+    expect(result.name).toBe('SystemUser')
+    warn.mockRestore()
+  })
+
+  it('懒加载出来的组件被注入了 name（否则 keep-alive 匹配不上）', async () => {
+    // 用一个很轻的页面：加载真实业务页面会把 CrudPage 整条依赖链带进来，测试会超时
+    const result = resolveComponent('error/404', '/404')
+    const component = (await result.loader()) as { name?: string; setup?: unknown }
+
+    expect(component.name).toBe('Error404')
+    // 确认拿到的是组件对象本身（注入名字不能把组件弄丢）
+    expect(typeof component.setup).toBe('function')
+  })
+
+  it('Layout / 占位页不需要组件名（它们不是标签页）', () => {
+    expect(resolveComponent('Layout', '/x').name).toBeUndefined()
+    expect(resolveComponent(undefined, '/x').name).toBeUndefined()
+  })
+
+  it('路由名用组件名，与缓存名单同源', () => {
+    const routes = buildRoutes([REAL_DIRECTORY])
+
+    expect(routes[0]!.children?.[0]!.name).toBe('MmsProject')
+    expect(routes[0]!.children?.[1]!.name).toBe('UsercenterStudent')
+    // 目录节点（Layout）保留后端给的名字
+    expect(routes[0]!.name).toBe('Pguide')
   })
 })

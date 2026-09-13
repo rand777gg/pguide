@@ -62,9 +62,9 @@ apps/manage/src/
 ├── composables/
 │   ├── useCrud.ts         ★ 列表页的全部状态与行为
 │   └── crud-config.ts     列 / 表单字段的类型定义
-├── layout/                侧边栏 + 顶栏 + 主内容
+├── layout/                侧边栏 + 顶栏 + 多标签页（TagsView） + 主内容区
 ├── router/index.ts        静态路由 + 动态路由守卫
-├── stores/                user / permission / app
+├── stores/                user / permission / app / tags
 ├── utils/
 │   ├── dynamic-route.ts   ★ 菜单树 → vue-router 路由
 │   ├── file.ts            ★ Blob 落盘 + 导出文件名（时间戳）
@@ -218,6 +218,32 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 > 权限串是 `project:info:*`。权限串只能从 Controller 的 `@PreAuthorize` 抄，
 > 从 URL 推是错的。
 
+### 多标签页（TagsView）与缓存
+
+`layout/components/TagsView.vue` 对应老 ruoyi-ui 的同名组件：
+点标签切页、点 × 关页、右键「刷新 / 关闭 / 关闭其它 / 关闭全部」，
+固定标签（首页，`meta.affix`）没有关闭按钮。
+状态在 `stores/tags.ts`，两份数据要分清：
+
+| | 作用 |
+|---|---|
+| `visitedViews` | 界面上那一排标签 |
+| `cachedNames` | `<KeepAlive :include>` 的缓存名单 |
+
+关标签会顺手把缓存也丢掉，所以「关掉再打开」是一个干净的新页面；
+而「刷新」是丢缓存 + 走一次 `/redirect` 中转，让当前页重新挂载。
+
+> ⚠️ **这里有个不容易发现的哑坑**：`<KeepAlive :include>` 是按**组件名**匹配的，
+> 而 `<script setup>` 的组件名默认从**文件名**推断 —— 我们的页面全叫 `index.vue`，
+> 推断出来都叫 "Index"。所以「include 里写路由名」这种写法看着没问题，
+> 实际一个页面都缓存不住，而且不报任何错，只表现为「切回来查询条件没了」。
+>
+> 解法在 `utils/dynamic-route.ts`：从组件路径生成一个 PascalCase 名字
+> （`system/user/index` → `SystemUser`），**同时用作路由名和组件名**
+> （加载组件时把 name 注入进去），两边同源才匹配得上。
+> `layout/components/__tests__/keep-alive.spec.ts` 把「注入能缓存 / 不注入缓存不住」
+> 两种情形都钉下来了。
+
 ### 三份数据必须完全一致
 
 同一个权限串出现在三个地方，**必须是同一个字符串**：
@@ -300,7 +326,7 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 
 ### 相对老 ruoyi-ui 未搬的功能
 
-- 多标签页（TagsView）与主题设置抽屉
+- 主题设置抽屉（Settings）—— 低频，且主题变量已在 styles 里统一定义
 - 首页的 echarts 统计图（老工程为一个首页引入整个 echarts，1MB+）
 - 角色分配菜单的独立弹窗（简化成了表单字段，`roleApi.getRoleMenuTree` 已备好）
 

@@ -38,6 +38,48 @@ export interface ResolveResult {
   loader: () => Promise<unknown>
   /** 是否用了兜底（说明 sys_menu 里的 component 路径有问题） */
   missing: boolean
+  /**
+   * 组件名（见 viewName 的说明）。
+   * 只有真实页面组件才有 —— Layout / ParentView / 占位页不是标签页，不需要。
+   */
+  name?: string
+}
+
+/**
+ * 组件路径 → 组件名（PascalCase）：`system/user/index` → `SystemUser`。
+ *
+ * ── 为什么需要这个 ──
+ *
+ * TagsView 的 keep-alive 缓存是按**组件名**匹配的（`<KeepAlive :include>`），
+ * 而 `<script setup>` 的 SFC 名字默认从**文件名**推断 —— 我们的页面全叫
+ * `index.vue`，推断出来都叫 "Index"，于是 include 永远匹配不上：
+ * keep-alive 看着写了，实际一个页面都没缓存住（这种问题不会报错，只会
+ * 让人觉得「怎么切回来查询条件没了」）。
+ *
+ * 所以这里从组件路径生成一个稳定且唯一的名字，**同时用作路由名和组件名**，
+ * 两边同源就不会对不上（Store 里的 cachedNames 用的就是这个路由名）。
+ */
+export function viewName(component: string): string {
+  return component
+    .replace(/\/index$/, '')
+    .split(/[/-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join('')
+}
+
+/**
+ * 给懒加载出来的组件注入 name。
+ *
+ * `<script setup>` 组件的 name 来自文件名，这里覆盖掉它，
+ * KeepAlive 的 include 才能按我们的名字匹配（KeepAlive 取名字时
+ * 优先用 `name`，没有再退回 `__name`）。
+ */
+function withName(
+  loader: () => Promise<{ default: object }>,
+  name: string,
+): () => Promise<unknown> {
+  return () => loader().then((mod) => ({ ...mod.default, name }))
 }
 
 /** 把 `system/user/index` 解析成组件加载函数 */
@@ -53,7 +95,11 @@ export function resolveComponent(component: string | undefined, routePath: strin
   const key = `../views/${component}.vue`
   const loader = viewModules[key]
   if (loader) {
-    return { loader: loader as () => Promise<unknown>, missing: false }
+    return {
+      loader: withName(loader as () => Promise<{ default: object }>, viewName(component)),
+      missing: false,
+      name: viewName(component),
+    }
   }
 
   // 找不到就兜底，但要留下痕迹
@@ -100,8 +146,13 @@ export function buildRoutes(routes: DynamicRoute[], basePath = ''): RouteRecordR
     } as RouteRecordRaw
 
     if (route.component) {
-      const { loader } = resolveComponent(route.component, fullPath)
+      const { loader, name, missing } = resolveComponent(route.component, fullPath)
       record.component = loader as RouteRecordRaw['component']
+      // 真实页面用组件路径派生的名字（与组件名同源，TagsView 的缓存靠它匹配）；
+      // 占位页 / Layout 这些保留后端给的名字
+      if (name && !missing) {
+        record.name = name
+      }
     } else if (route.children?.length) {
       // 没有 component 但有子节点：用 Layout / ParentView 承载
       record.component = basePath ? ParentView : Layout

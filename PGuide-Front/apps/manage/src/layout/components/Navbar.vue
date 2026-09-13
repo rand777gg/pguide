@@ -5,11 +5,13 @@ import { Expand, Fold, SwitchButton, User as UserIcon } from '@element-plus/icon
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
+import { useTagsStore } from '@/stores/tags'
 
 /** 顶部导航：折叠按钮 + 面包屑 + 用户下拉 */
 const appStore = useAppStore()
 const userStore = useUserStore()
 const permissionStore = usePermissionStore()
+const tagsStore = useTagsStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -25,6 +27,8 @@ const breadcrumbs = computed(() =>
 async function handleLogout(): Promise<void> {
   await userStore.logout()
   permissionStore.reset()
+  // 换个人登录不该看到上一个人的标签页
+  tagsStore.reset()
   void router.push({ path: '/login' })
 }
 
