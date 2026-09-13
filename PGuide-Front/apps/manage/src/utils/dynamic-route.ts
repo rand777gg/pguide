@@ -43,6 +43,47 @@ export interface ResolveResult {
    * 只有真实页面组件才有 —— Layout / ParentView / 占位页不是标签页，不需要。
    */
   name?: string
+  /** 找不到的组件路径（仅 missing 为 true 时有值），供调用方汇总报告 */
+  missingComponent?: string
+  /** 缺失，但属于「计划中还没实现」的菜单（见 KNOWN_UNIMPLEMENTED） */
+  knownUnimplemented?: boolean
+}
+
+/**
+ * **已知未实现**的菜单组件路径。
+ *
+ * 这些是 RuoYi 基线的菜单（`20-ruoyi-vue-3.8.6-baseline.sql`），
+ * 新前端**故意**没做：要么依赖 RuoYi 特有能力（Druid 面板 iframe、
+ * 代码生成器、定时任务调度），要么是运维向、价值密度低。
+ * 点进去会落到占位页，这是预期行为，不是配置错误。
+ *
+ * 为什么要显式列出来：前台每次登录都会拉整棵菜单树，这些菜单会**每一条**
+ * 触发一次「组件不存在」的日志。原来九条都是 `console.error`，
+ * 和真正的配置错误混在一起，控制台一片红 —— 看起来像登录失败了，
+ * 实际登录是成功的（这也是实际收到的反馈）。
+ *
+ * 现在规则是：
+ *   - 在名单里 → 汇总成**一条** `console.warn`（预期内的占位）
+ *   - 不在名单里 → 汇总成**一条** `console.error`（多半是 sys_menu 写错了）
+ *
+ * 实现某个页面后，把它从这里删掉（README 的「未实现」清单也要同步）。
+ */
+export const KNOWN_UNIMPLEMENTED: readonly string[] = [
+  // 系统监控
+  'monitor/online/index',
+  'monitor/job/index',
+  'monitor/druid/index',
+  'monitor/server/index',
+  'monitor/cache/index',
+  'monitor/cache/list',
+  // 系统工具
+  'tool/build/index',
+  'tool/gen/index',
+  'tool/swagger/index',
+]
+
+export function isKnownUnimplemented(component: string): boolean {
+  return KNOWN_UNIMPLEMENTED.includes(component)
 }
 
 /**
@@ -102,17 +143,28 @@ export function resolveComponent(component: string | undefined, routePath: strin
     }
   }
 
-  // 找不到就兜底，但要留下痕迹
-  console.error(
-    `[manage] 菜单 ${routePath} 指向的组件不存在：views/${component}.vue。` +
-      `已回退到占位页。请检查 sys_menu 表里的 component 字段。`,
-  )
-  return { loader: PLACEHOLDER_VIEW, missing: true }
+  // 找不到就兜底。**不在这里打日志** —— 每次登录整棵菜单树都会走一遍，
+  // 逐条打会把控制台刷红（见 KNOWN_UNIMPLEMENTED 的说明）。
+  // 汇总报告交给 buildRoutes，一次导航只留一条。
+  void routePath
+  return {
+    loader: PLACEHOLDER_VIEW,
+    missing: true,
+    missingComponent: component,
+    knownUnimplemented: isKnownUnimplemented(component),
+  }
 }
 
 /** 是否外链 */
 export function isExternalLink(path: string): boolean {
   return /^https?:\/\//.test(path)
+}
+
+/** 一个「组件找不到」的记录，用于最后汇总成一条日志 */
+interface MissingRef {
+  routePath: string
+  component: string
+  known: boolean
 }
 
 /**
@@ -122,8 +174,25 @@ export function isExternalLink(path: string): boolean {
  *   - 顶级路由的 path 要加 `/`
  *   - 单子节点目录会被「提级」（alwaysShow 为 false 时直接用子节点）
  *   - 目录类型（menuType=M）用 Layout 或 ParentView 承载
+ *
+ * 组件找不到的菜单会**汇总成一条**日志（见 reportMissing），
+ * 而不是每一条各打一条 —— 每次登录都会拉整棵菜单树，逐条打会把控制台刷红。
  */
 export function buildRoutes(routes: DynamicRoute[], basePath = ''): RouteRecordRaw[] {
+  const missing: MissingRef[] = []
+  const records = buildRouteRecords(routes, basePath, missing)
+
+  // 只在外层汇总报告一次（递归里不打）
+  if (!basePath) reportMissing(missing)
+
+  return records
+}
+
+function buildRouteRecords(
+  routes: DynamicRoute[],
+  basePath: string,
+  missing: MissingRef[],
+): RouteRecordRaw[] {
   const result: RouteRecordRaw[] = []
 
   for (const route of routes) {
@@ -142,16 +211,31 @@ export function buildRoutes(routes: DynamicRoute[], basePath = ''): RouteRecordR
         noCache: route.meta?.noCache ?? false,
         hidden: route.hidden ?? false,
       },
-      children: route.children ? buildRoutes(route.children, fullPath) : undefined,
+      children: route.children
+        ? buildRouteRecords(route.children, fullPath, missing)
+        : undefined,
     } as RouteRecordRaw
 
     if (route.component) {
-      const { loader, name, missing } = resolveComponent(route.component, fullPath)
-      record.component = loader as RouteRecordRaw['component']
+      const resolved = resolveComponent(route.component, fullPath)
+      record.component = resolved.loader as RouteRecordRaw['component']
       // 真实页面用组件路径派生的名字（与组件名同源，TagsView 的缓存靠它匹配）；
       // 占位页 / Layout 这些保留后端给的名字
-      if (name && !missing) {
-        record.name = name
+      if (resolved.name && !resolved.missing) {
+        record.name = resolved.name
+      }
+      if (resolved.missing && resolved.missingComponent) {
+        missing.push({
+          routePath: fullPath,
+          component: resolved.missingComponent,
+          known: Boolean(resolved.knownUnimplemented),
+        })
+        // 把「缺哪个组件、是不是计划内」带到路由 meta 上，占位页据此显示不同文案
+        record.meta = {
+          ...record.meta,
+          missingComponent: resolved.missingComponent,
+          unimplemented: Boolean(resolved.knownUnimplemented),
+        }
       }
     } else if (route.children?.length) {
       // 没有 component 但有子节点：用 Layout / ParentView 承载
@@ -174,6 +258,41 @@ export function buildRoutes(routes: DynamicRoute[], basePath = ''): RouteRecordR
   }
 
   return result
+}
+
+/**
+ * 汇总报告组件缺失。
+ *
+ * 分两档，因为这两种情况的**处理方式完全不同**：
+ *
+ *   - 已知未实现（KNOWN_UNIMPLEMENTED）：预期内的占位页 → `console.warn`，
+ *     一句话说清「几个菜单没做，要实现就建组件」
+ *   - 其它：多半是 `sys_menu.component` 写错了（比如路径拼错、菜单是别处
+ *     拷过来的），没有兜底就会静默白屏 → `console.error`，把路由和组件路径
+ *     都列出来，方便直接去菜单管理里改
+ *
+ * 两种都没有时**不打任何日志** —— 正常登录控制台应该是干净的。
+ */
+function reportMissing(missing: MissingRef[]): void {
+  if (missing.length === 0) return
+
+  const known = missing.filter((item) => item.known)
+  const unknown = missing.filter((item) => !item.known)
+
+  if (known.length > 0) {
+    console.warn(
+      `[manage] ${known.length} 个菜单尚未实现（点进去是占位页，属预期）：` +
+        known.map((item) => item.routePath).join('、') +
+        '。要实现就在 src/views 下建对应组件，详见 apps/manage/README.md。',
+    )
+  }
+
+  if (unknown.length > 0) {
+    console.error(
+      `[manage] ${unknown.length} 个菜单指向的组件不存在，多半是 sys_menu.component 配错了：` +
+        unknown.map((item) => `${item.routePath} → views/${item.component}.vue`).join('、'),
+    )
+  }
 }
 
 function joinPath(base: string, path: string): string {

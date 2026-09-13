@@ -184,8 +184,29 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 
 老 `ruoyi-ui` 的 `loadView` 找不到组件就返回 `undefined`，页面白屏且没有线索。
 
-新版做了兜底：找不到就渲染占位页，并在界面上写明**缺哪个组件路径**，
-控制台也有 `console.error`。详见 `src/utils/dynamic-route.ts`。
+新版做了兜底：找不到就渲染占位页，并在界面上写明**缺哪个组件路径**。
+详见 `src/utils/dynamic-route.ts`。
+
+占位页分两种，因为**下一步动作完全不一样**：
+
+| 情况 | 判定依据 | 界面文案 |
+|---|---|---|
+| 功能有意没做（代码生成器、定时任务…） | 在 `KNOWN_UNIMPLEMENTED` 名单里 | 「该功能尚未实现」+ 怎么补 |
+| `sys_menu.component` 写错了 | 不在名单里 | 「菜单配置有误」+ 去菜单管理改路径 |
+
+日志也按这个分档，而且**一次导航只留一条**：
+
+```
+[manage] 9 个菜单尚未实现（点进去是占位页，属预期）：/monitor/online、/monitor/job、…   ← console.warn
+[manage] 1 个菜单指向的组件不存在，多半是 sys_menu.component 配错了：/x → views/x/index.vue  ← console.error
+```
+
+> 为什么要强调这个：第一版是**每条各打一条 `console.error`**，而每次登录都会拉整棵
+> 菜单树 → 控制台一次刷出九条红字，看起来像登录失败（实际登录是成功的），
+> 这个反馈真实收到过。现在正常登录只有一条 warn，一眼能看出是预期内的。
+>
+> `src/__tests__/permission-catalog.spec.ts` 会校验「基线菜单里的每个 component
+> 要么有真实页面、要么已登记」，所以这份清单不会腐烂成误导信息。
 
 实测踩到的两个坑也写在那个文件里：
 
