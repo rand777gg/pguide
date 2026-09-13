@@ -8,7 +8,13 @@ import type { CmsCptInfo } from '@/api/modules/business'
  * 竞赛信息管理。
  *
  * 老工程对应 `views/cmsmanage/cptinfo/index.vue`。
- * 权限前缀来自 `CmsCptInfoController`：cmsmanage:cptinfo:xxx
+ *
+ * ⚠️ 注意区分两个「前缀」：
+ *   URL 前缀      /cmsmanage/cptinfo   ← controller 的 @RequestMapping
+ *   权限前缀      manage:cptinfo       ← @PreAuthorize 里的 authority
+ * 二者**不一样**，权限串不是从 URL 推出来的。写错的表现是：
+ * 管理员（*:*:*）一切正常，普通角色按钮全消失、接口 403。
+ * 这个值必须与 `CmsCptInfoController` 的 `@PreAuthorize` 完全一致。
  */
 const columns: CrudColumn<CmsCptInfo>[] = [
   { prop: 'cptId', label: '竞赛ID', width: 100 },
@@ -34,7 +40,7 @@ const formFields: CrudFormField<CmsCptInfo>[] = [
     resource="竞赛"
     :api="businessApi.cmsCompetitionApi"
     id-key="cptId"
-    permission="cmsmanage:cptinfo"
+    permission="manage:cptinfo"
     :columns="columns"
     :form-fields="formFields"
   />
