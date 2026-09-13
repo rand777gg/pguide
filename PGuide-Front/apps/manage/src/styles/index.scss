@@ -1,0 +1,64 @@
+/**
+ * 全局样式。
+ *
+ * 老工程没有独立样式文件，全局样式写在 App.vue 的**非 scoped** `<style>` 里
+ * （`* { margin: 0; padding: 0 }`、`#app` 的渐变背景、`font-family: serif`），
+ * 另外还有组件泄漏出来的样式（`components/flips/BaseFlipTest.vue` 的
+ * `--xyz-*`、auth-ui `waveInput.vue` 里的 `body {}`）。
+ * 这里统一收口，组件里只允许写 scoped 样式。
+ */
+
+// 设计令牌集中在这里，组件里用 var(--pg-xxx) 引用
+@use './variables' as *;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family:
+    'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--pg-text-primary);
+  background-color: var(--pg-bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  min-height: 100vh;
+  /**
+   * 沿用老工程的页面底色（很浅的绿白渐变），但把 `font-family: serif`
+   * 换成了无衬线 —— serif 在 Windows 上中文渲染很难看。
+   */
+  background-image: linear-gradient(var(--pg-bg-gradient-from), var(--pg-bg-gradient-to));
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+// 滚动条美化（只在支持的浏览器生效）
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+  }
+}

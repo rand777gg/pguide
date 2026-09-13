@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "pnpm --filter @pguide/match dev",
     "dev:auth": "pnpm --filter @pguide/auth dev",
+    "dev:manage": "pnpm --filter @pguide/manage dev",
     "build": "pnpm -r --filter \"./apps/*\" build",
     "build:match": "pnpm --filter @pguide/match build",
     "preview": "pnpm --filter @pguide/match preview",
