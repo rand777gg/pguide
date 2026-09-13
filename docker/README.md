@@ -458,17 +458,44 @@ docker/
 
 ## 九、前端
 
-前端不在这套编排里（4 个独立 Vue 2 工程，且 `ruoyi-ui` 要求 Node 16，本机是 Node 24）。
-本地跑：
+前端是独立的 monorepo `PGuide-Front/`（Vue3 + Vite + TypeScript，pnpm workspace），
+**不在这套编排里**，要单独起 dev server（本机 Node ≥ 20.19）。
 
 ```bash
-cd PGuide-Front/pguide-match-ui && npm install && npm run dev   # 组队中心 → localhost:4000
-cd PGuide-Front/pguide-auth-ui  && npm install && npm run dev   # 鉴权中心 → localhost:99
-cd PGuide-Manage/ruoyi-ui       && npm install && npm run dev   # 后台界面 → localhost:80
+cd PGuide-Front
+pnpm install          # 首次
+
+pnpm dev:manage       # 管理后台  → http://localhost:81
+pnpm dev             # 组队中心  → http://localhost:4000
+pnpm dev:auth        # 鉴权中心  → http://localhost:99
 ```
 
-它们的 `.env.development` 已指向 `http://localhost:666/api`（网关），和端口对得上。
-`pguide-ui-demo` 跑不起来——是动效试验页，路由指向不存在的 `login.vue`。
+三个应用是三个前台进程，**要各起一个终端**（或者用 `Start-Job` / `&` 放后台）。
+代理目标写死在各自的 `vite.config.ts` 里，可用 `VITE_PROXY_TARGET` 覆盖：
+
+| 应用 | 端口 | 代理 | 需要哪个 profile |
+|---|---|---|---|
+| `apps/manage` 管理后台 | 81 | `/dev-api` → `http://localhost:8080`（转发时去掉前缀） | `manage` |
+| `apps/match` 组队中心 | 4000 | `/api` → `http://localhost:666`（网关） | `back` |
+| `apps/auth` 鉴权中心 | 99 | `/api` → `http://localhost:666`（网关） | `back` |
+
+登录账号：管理后台 `admin` / `admin123`（来自 `20-ruoyi-vue-3.8.6-baseline.sql`）；
+组队中心/鉴权中心的演示账号 `student001` / `123456`（来自 `90-demo-seed.sql`）。
+
+管理后台的菜单有一部分来自 `docker/init/95-pguide-manage-menus.sql`，
+而 init 脚本**只在数据卷首次创建时执行** —— 数据卷已存在时要手工补一遍
+（脚本用 `INSERT IGNORE` 写，重复执行安全）：
+
+```bash
+docker exec -i -e MYSQL_PWD=pguide123 pguide-dev-mysql mysql -uroot \
+  --default-character-set=utf8mb4 < docker/init/95-pguide-manage-menus.sql
+```
+
+> 旧的四套 Vue2 工程（`pguide-match-ui`、`pguide-auth-ui`、`pguide-ui-demo`、
+> `PGuide-Manage/ruoyi-ui`）保留在仓库里作对照，**不再维护**；
+> `ruoyi-ui` 还要求 Node 16，与本机 Node 24 不兼容。新功能一律写在
+> `PGuide-Front/apps/*`，工程约定见 `dev-manual/`，管理端细节见
+> `PGuide-Front/apps/manage/README.md`。
 
 ---
 
