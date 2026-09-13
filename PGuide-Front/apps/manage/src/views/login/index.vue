@@ -18,7 +18,15 @@ const route = useRoute()
 const userStore = useUserStore()
 const permissionStore = usePermissionStore()
 
-const form = reactive({ username: 'admin', password: 'admin123', code: '', uuid: '' })
+/**
+ * 表单默认值。
+ *
+ * ⚠️ 刻意**留空**。早期版本为了本地调试方便预填了 admin / admin123，
+ * 但那是把凭据硬编码进源码 —— 正是 dev-manual/03 里明令禁止的做法，
+ * 而且这份前端一旦被部署出去就等于公开了默认口令。
+ * 演示账号写在界面下方的提示文字里就够了。
+ */
+const form = reactive({ username: '', password: '', code: '', uuid: '' })
 const captchaImg = ref('')
 /** 后端可以通过 sys_config 关掉验证码 */
 const captchaEnabled = ref(true)

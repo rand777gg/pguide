@@ -91,6 +91,11 @@ function renderCell(row: T, column: CrudColumn<T>): string {
       return String(raw).replace('T', ' ').slice(0, 19)
     case 'bool':
       return raw === 1 || raw === '1' || raw === 'Y' ? '是' : '否'
+    // tag 和 dict 都要按字典把值翻译成文案。
+    // 第一版漏了 'tag' 分支，导致所有标签列（用户状态、角色状态、
+    // 项目状态……）显示的都是原始数字而不是「待审核」这类文案 ——
+    // 由 CrudPage 的渲染测试抓出来。
+    case 'tag':
     case 'dict':
       return column.dict?.find((d) => String(d.value) === String(raw))?.label ?? String(raw)
     default:
