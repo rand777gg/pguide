@@ -38,6 +38,14 @@ export interface CrudApi<T> {
 
 export interface CrudApiOptions {
   /**
+   * 是否提供导出接口，默认 true。
+   *
+   * RuoYi 生成器产物（含 pguide 业务模块）都有 `POST {base}/export`，
+   * 但**通知公告没有**（`SysNoticeController` 里没有这个方法）。
+   * 那种模块要显式关掉，否则界面上会多一个点了就报错的「导出」按钮。
+   */
+  exportable?: boolean
+  /**
    * 是否提供导入接口。
    *
    * 默认关闭：RuoYi 只有 `SysUserController` 有 `/importData` 与 `/importTemplate`，
@@ -62,8 +70,12 @@ function commonMethods<T extends object>(basePath: string): Pick<
   }
 }
 
-/** 导出：RuoYi 生成器产物都带 `POST {base}/export` */
-function exportMethod<T extends object>(basePath: string): Pick<CrudApi<T>, 'exportFile'> {
+/** 导出：RuoYi 生成器产物都带 `POST {base}/export`（少数模块没有，用 exportable 关掉） */
+function exportMethod<T extends object>(
+  basePath: string,
+  options: CrudApiOptions,
+): Pick<CrudApi<T>, 'exportFile'> {
+  if (options.exportable === false) return {}
   return { exportFile: (query) => download(`${basePath}/export`, query) }
 }
 
@@ -92,7 +104,7 @@ export function createCrudApi<T extends object>(
   return {
     list: (query) => http.page<T>(`${basePath}/list`, query),
     ...commonMethods<T>(basePath),
-    ...exportMethod<T>(basePath),
+    ...exportMethod<T>(basePath, options),
     ...importMethods<T>(basePath, options),
   }
 }

@@ -415,3 +415,79 @@ describe('CrudPage 导出与导入', () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+describe('CrudPage 按钮显隐的细分控制', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function toolbarText(wrapper: VueWrapper): string {
+    return wrapper.find('.crud-page__toolbar').text()
+  }
+
+  it('hide-add / hide-edit 时保留删除（操作日志就是这种页面）', async () => {
+    const { wrapper } = mountPage({ hideAdd: true, hideEdit: true })
+    await flushPromises()
+
+    expect(toolbarText(wrapper)).not.toContain('新增')
+    // 删除还在，多选列也还在
+    expect(toolbarText(wrapper)).toContain('删除')
+    expect(wrapper.find('.el-table-column--selection').exists()).toBe(true)
+    // 操作列只剩「删除」，没有「修改」
+    expect(wrapper.text()).not.toContain('修改')
+  })
+
+  it('hide-remove 同时去掉批量删除与多选列', async () => {
+    const { wrapper } = mountPage({ hideRemove: true })
+    await flushPromises()
+
+    expect(toolbarText(wrapper)).not.toContain('删除')
+    // 勾选框是给批量删除用的，没有删除就不必留
+    expect(wrapper.find('.el-table-column--selection').exists()).toBe(false)
+    // 但新增、修改还在
+    expect(toolbarText(wrapper)).toContain('新增')
+    expect(wrapper.text()).toContain('修改')
+  })
+
+  it('readonly 仍然等于三个都隐藏（保持原有语义）', async () => {
+    const { wrapper } = mountPage({ readonly: true })
+    await flushPromises()
+
+    const text = toolbarText(wrapper)
+    expect(text).not.toContain('新增')
+    expect(text).not.toContain('删除')
+    expect(wrapper.text()).not.toContain('修改')
+    expect(wrapper.find('.el-table-column--selection').exists()).toBe(false)
+  })
+
+  it('工具栏插槽能拿到 load 与选中项，用来做「清空」这类批量操作', async () => {
+    const api = makeApi()
+    const wrapper = mount(CrudPage, {
+      props: {
+        resource: '操作日志',
+        api,
+        idKey: 'id',
+        columns: COLUMNS,
+        permission: 'monitor:operlog',
+      } as unknown as never,
+      global: { directives: { 'has-permi': {} } },
+      slots: {
+        toolbar: `<template #toolbar="{ load, selectedIds }">
+          <button class="custom-clean" @click="load()">清空({{ selectedIds.length }})</button>
+        </template>`,
+      },
+    })
+    await flushPromises()
+
+    const custom = wrapper.find('.custom-clean')
+    expect(custom.exists()).toBe(true)
+    expect(custom.text()).toBe('清空(0)')
+
+    // 插槽里的自定义按钮也能触发列表刷新
+    api.list.mockClear()
+    await custom.trigger('click')
+    await flushPromises()
+    expect(api.list).toHaveBeenCalledTimes(1)
+  })
+})

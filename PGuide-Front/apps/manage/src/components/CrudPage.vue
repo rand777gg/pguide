@@ -1,11 +1,12 @@
 <script setup lang="ts" generic="T extends object">
 import { Plus, Delete, Refresh, Search, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
-import { reactive } from 'vue'
+import { computed, reactive, useSlots } from 'vue'
 import { ElMessageBox } from 'element-plus/es'
 import type { CrudApi } from '@/api'
 import { useCrud } from '@/composables/useCrud'
 import type { FormValue, QueryValue } from '@/composables/useCrud'
 import type { CrudColumn, CrudFormField, TagType } from '@/composables/crud-config'
+import { readQueryRange, writeQueryRange } from '@/utils/query-range'
 
 /**
  * 配置驱动的 CRUD 页面。
@@ -34,8 +35,17 @@ const props = withDefaults(
     permission?: string
     defaultQuery?: Record<string, QueryValue>
     formDefaults?: () => Record<string, FormValue>
-    /** 隐藏新增按钮（只读页面用） */
+    /**
+     * 只读页面：等于同时打开 hideAdd / hideEdit / hideRemove。
+     * 导出不受影响 —— 只读页面（操作日志、登录日志）恰恰最需要导出。
+     */
     readonly?: boolean
+    /** 单独隐藏新增（如日志类页面：只能看和删，不能改） */
+    hideAdd?: boolean
+    /** 单独隐藏「修改」 */
+    hideEdit?: boolean
+    /** 单独隐藏「删除」（同时也去掉多选列） */
+    hideRemove?: boolean
     /**
      * 树形数据（菜单、部门）。
      * 开启后表格按 row-key + children 渲染成可展开的树，并隐藏分页
@@ -49,13 +59,19 @@ const props = withDefaults(
     defaultQuery: () => ({}),
     formDefaults: undefined,
     readonly: false,
+    hideAdd: false,
+    hideEdit: false,
+    hideRemove: false,
     tree: false,
   },
 )
 
 defineSlots<{
-  /** 工具栏左侧的自定义按钮 */
-  toolbar?: () => unknown
+  /**
+   * 工具栏左侧的自定义按钮（如「清空日志」）。
+   * 插槽给 `load`，自定义按钮改完数据后可以直接刷新列表。
+   */
+  toolbar?: (props: { load: () => void; selectedIds: Array<number | string> }) => unknown
   /** 表格右侧的自定义操作列 */
   actions?: (props: { row: T }) => unknown
   /** 弹窗表单底部的自定义内容 */
@@ -72,6 +88,22 @@ const crud = useCrud<T>({
 
 // 页面打开就加载
 void crud.load()
+
+const slots = useSlots()
+
+/**
+ * 三组按钮的显隐。
+ *
+ * `readonly` 是「全隐藏」的快捷写法；单独的 hideXxx 用来应付
+ * 日志类页面（操作日志：只读 + 可删除，导入导出另说）。
+ */
+const showAdd = computed(() => !props.readonly && !props.hideAdd)
+const showEdit = computed(() => !props.readonly && !props.hideEdit)
+const showRemove = computed(() => !props.readonly && !props.hideRemove)
+/** 操作列：只要还有按钮、或者外面塞了自定义操作，就留着 */
+const showActionsColumn = computed(
+  () => showEdit.value || showRemove.value || Boolean(slots.actions),
+)
 
 /** 权限点：RuoYi 的约定是 {prefix}:list / :add / :edit / :remove */
 function perm(action: string): string[] {
@@ -187,12 +219,13 @@ defineExpose({ crud })
 
           <el-date-picker
             v-else-if="col.searchType === 'daterange'"
-            v-model="crud.query[col.prop]"
+            :model-value="readQueryRange(crud.query, col)"
             type="daterange"
             value-format="YYYY-MM-DD"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
             style="width: 260px"
+            @update:model-value="(value: unknown) => writeQueryRange(crud.query, col, value)"
           />
 
           <el-input
@@ -217,7 +250,7 @@ defineExpose({ crud })
       <div class="crud-page__toolbar">
         <div class="crud-page__toolbar-left">
           <el-button
-            v-if="!readonly"
+            v-if="showAdd"
             v-has-permi="perm('add')"
             type="primary"
             :icon="Plus"
@@ -226,7 +259,7 @@ defineExpose({ crud })
             新增
           </el-button>
           <el-button
-            v-if="!readonly"
+            v-if="showRemove"
             v-has-permi="perm('remove')"
             type="danger"
             plain
@@ -261,7 +294,7 @@ defineExpose({ crud })
           >
             导入
           </el-button>
-          <slot name="toolbar" />
+          <slot name="toolbar" :load="crud.load" :selected-ids="crud.selectedIds.value" />
         </div>
         <div class="crud-page__toolbar-right">
           <el-button :icon="Refresh" circle @click="crud.load()" />
@@ -277,7 +310,8 @@ defineExpose({ crud })
         :default-expand-all="tree"
         @selection-change="crud.handleSelectionChange"
       >
-        <el-table-column type="selection" width="48" :selectable="() => !readonly" />
+        <!-- 多选列只在「有批量删除」时出现，否则是个没用的勾选框 -->
+        <el-table-column v-if="showRemove" type="selection" width="48" />
 
         <el-table-column
           v-for="col in tableColumns"
@@ -298,17 +332,29 @@ defineExpose({ crud })
         </el-table-column>
 
         <el-table-column
-          v-if="!readonly"
+          v-if="showActionsColumn"
           label="操作"
           width="160"
           align="center"
           fixed="right"
         >
           <template #default="{ row }">
-            <el-button v-has-permi="perm('edit')" type="primary" link @click="crud.openEdit(row)">
+            <el-button
+              v-if="showEdit"
+              v-has-permi="perm('edit')"
+              type="primary"
+              link
+              @click="crud.openEdit(row)"
+            >
               修改
             </el-button>
-            <el-button v-has-permi="perm('remove')" type="danger" link @click="handleRemoveRow(row)">
+            <el-button
+              v-if="showRemove"
+              v-has-permi="perm('remove')"
+              type="danger"
+              link
+              @click="handleRemoveRow(row)"
+            >
               删除
             </el-button>
             <slot name="actions" :row="row" />

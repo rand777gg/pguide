@@ -35,6 +35,16 @@ export interface CrudColumn<T extends object = Record<string, unknown>> {
   searchable?: boolean
   /** 搜索控件类型，默认 input */
   searchType?: 'input' | 'select' | 'daterange'
+  /**
+   * 搜索参数名（与字段名不同时才需要）。
+   *
+   * 最常见的场景是 RuoYi 的时间区间：后端读的是 `BaseEntity.params` 里的
+   * `beginTime` / `endTime`，前端要发 `params[beginTime]` 这种键。
+   * 展示用的 `prop`（如 `createTime`）和查询键并不相同。
+   */
+  searchKey?: string
+  /** 区间搜索的结束参数名（searchType=daterange 时用） */
+  searchKeyEnd?: string
   /** 搜索下拉的选项（searchType=select 时用） */
   searchOptions?: Array<{ label: string; value: string | number }>
   /** 搜索框占位文案 */
