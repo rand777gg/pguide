@@ -94,6 +94,80 @@ export interface SysPost {
   remark?: string
 }
 
+/** 参数配置（sys_config） */
+export interface SysConfig {
+  configId?: number
+  configName: string
+  configKey: string
+  configValue: string
+  /** Y 系统内置（不允许删除）N 否 */
+  configType?: string
+  remark?: string
+  createTime?: string
+}
+
+/** 通知公告（sys_notice） */
+export interface SysNotice {
+  noticeId?: number
+  noticeTitle: string
+  /** 1 通知 2 公告 */
+  noticeType?: string
+  noticeContent?: string
+  /** 0 正常 1 关闭 */
+  status?: string
+  createBy?: string
+  createTime?: string
+  remark?: string
+}
+
+/**
+ * 操作日志（sys_oper_log）。
+ *
+ * ⚠️ `businessType` 与 `status` 在实体里是 **Integer**，不是字符串
+ * （`SysLogininfor.status` 才是 String）。字典表的 value 直接写数字，
+ * renderCell 的字典查找两边都做了 String() 归一，所以能对上。
+ */
+export interface SysOperlog {
+  operId: number
+  /** 模块标题，如「用户管理」 */
+  title?: string
+  /** 业务类型：0 其它 1 新增 2 修改 3 删除 4 授权 5 导出 6 导入 7 强退 8 生成代码 9 清空数据 */
+  businessType?: number
+  /** 方法名称 */
+  method?: string
+  requestMethod?: string
+  /** 操作类别：0 其它 1 后台用户 2 手机端用户 */
+  operatorType?: number
+  operName?: string
+  deptName?: string
+  operUrl?: string
+  operIp?: string
+  operLocation?: string
+  /** 请求参数（可能很长，表格里靠省略号） */
+  operParam?: string
+  jsonResult?: string
+  /** 0 正常 1 异常 */
+  status?: number
+  errorMsg?: string
+  operTime?: string
+  /** 耗时（毫秒） */
+  costTime?: number
+}
+
+/** 登录日志（sys_logininfor） */
+export interface SysLogininfor {
+  infoId: number
+  userName?: string
+  /** 0 成功 1 失败 */
+  status?: string
+  ipaddr?: string
+  loginLocation?: string
+  browser?: string
+  os?: string
+  msg?: string
+  loginTime?: string
+}
+
 /** 字典类型（sys_dict_type） */
 export interface SysDictType {
   dictId?: number

@@ -49,10 +49,12 @@ pnpm dev:manage     # → http://localhost:81
 apps/manage/src/
 ├── api/
 │   ├── request.ts         RuoYi 专用 axios 客户端（{code,msg,data} 与平铺分页）
-│   ├── types.ts           RuoYi 实体类型（SysUser / SysRole / SysMenu / SysDept / SysDict*）
+│   ├── types.ts           RuoYi 实体类型（SysUser / SysRole / SysMenu / SysOperlog …）
 │   └── modules/
 │       ├── auth.ts        login / logout / getInfo / getRouters / captchaImage
 │       ├── user.ts role.ts menu.ts dept.ts dict.ts
+│       ├── system.ts      ★ 岗位 / 参数配置 / 通知公告
+│       ├── monitor.ts     ★ 操作日志 / 登录日志 / 清空 / 账户解锁
 │       ├── crud.ts        ★ createCrudApi / createTreeCrudApi 工厂
 │       └── business.ts    ★ pguide 业务模块（mms / cms / usercenter），一行一个
 ├── components/
@@ -66,6 +68,7 @@ apps/manage/src/
 ├── utils/
 │   ├── dynamic-route.ts   ★ 菜单树 → vue-router 路由
 │   ├── file.ts            ★ Blob 落盘 + 导出文件名（时间戳）
+│   ├── query-range.ts     ★ 日期区间 ↔ RuoYi 的 params[beginTime]
 │   └── menu-icon.ts       后端图标名 → Element Plus 图标（显式映射表）
 └── views/                 页面（大多只有几十行配置）
 ```
@@ -255,16 +258,38 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 
 ### 已实现（真实接口，完整增删改查）
 
-系统管理：**用户（含导入）/ 角色 / 菜单（树） / 部门（树） / 字典类型**
+系统管理：**用户（含导入）/ 角色 / 菜单（树） / 部门（树） / 字典类型 / 岗位 / 参数设置 / 通知公告**
+
+系统监控：**操作日志 / 登录日志**
 
 项导业务：**项目管理 / 招募需求 / 竞赛管理 / 学科字典 / 学生信息 / 教师信息**
 
-以上页面都支持**导出 Excel**（菜单、部门除外 —— 后端没有 `/export`）。
+除了菜单、部门、通知公告，其它页面都支持**导出 Excel** ——
+这三个模块后端没有 `/export`，导出能力自动关掉（见前面「导出 / 导入是跟着接口走的」）。
+
+### 日志类页面的两个特殊点
+
+操作日志、登录日志是「只能看 + 能删 + 能导出」的页面，所以用
+`hide-add` / `hide-edit` 而不是 `readonly`（后者会把删除一起藏掉）：
+
+| 页面 | 新增 | 修改 | 删除 | 导出 | 特有操作 |
+|---|---|---|---|---|---|
+| 操作日志 | ✗ | ✗ | ✓ | ✓ | 清空（`/clean`） |
+| 登录日志 | ✗ | ✗ | ✓ | ✓ | 清空、每行「解锁」 |
+
+两个实现细节值得记一笔：
+
+1. **时间区间搜索**用的是 RuoYi 的 `params[beginTime]` / `params[endTime]`
+   （后端 `BaseEntity.params`），靠列配置的 `searchKey` / `searchKeyEnd` 指定 ——
+   展示字段名（如 `operTime`）和查询键并不相同。
+   日期只选到天时结束值会自动补 `23:59:59`，否则「当天上午的数据」永远查不出来。
+2. **`SysOperLog.businessType` / `status` 是 Integer**（`SysLogininfor.status`
+   才是 String）。字典的 value 直接写数字；renderCell 的字典查找两边都做
+   `String()` 归一，所以能对上。
 
 ### 未实现（点进去是占位页，会说明缺什么）
 
-系统管理：岗位、参数设置、通知公告
-系统监控：在线用户、定时任务、数据监控、服务监控、缓存监控、缓存列表、操作日志、登录日志
+系统监控：在线用户、定时任务、数据监控、服务监控、缓存监控、缓存列表
 系统工具：表单构建、代码生成、系统接口
 
 这些页面要么依赖 RuoYi 特有能力（Druid 面板 iframe、代码生成器、定时任务调度），
