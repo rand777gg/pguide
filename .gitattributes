@@ -1,0 +1,38 @@
+# ============================================================
+# 换行符统一策略
+#
+# 本机 core.autocrlf=true，默认会把签出文件转成 CRLF。
+# 这在本项目里是**硬故障**，不是风格问题：
+#
+#   1. docker/backend.Dockerfile、docker/manage.Dockerfile
+#      用 `RUN ... \` 做行继续，CRLF 会让构建直接失败
+#   2. docker/normalize-config.sh 是 shell 脚本，
+#      CRLF 会让 Linux 容器报 bad interpreter
+#   3. docker/init/*.sql 由 Linux 容器里的 mysql 客户端读取
+#   4. 前端 ESLint / Prettier 默认按 LF 校验
+#
+# 所以统一按 LF 签出，唯一例外是 Windows 批处理。
+# ============================================================
+
+* text=auto eol=lf
+
+# Windows 批处理/命令脚本必须是 CRLF，否则 cmd 解析异常
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做任何转换（Git 靠扩展名判断，显式声明更稳）
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.svg  text eol=lf
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.jar  binary
+*.pptx binary
+*.xlsx binary
+*.xls  binary
+*.pdf  binary

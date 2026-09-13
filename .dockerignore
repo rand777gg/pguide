@@ -1,0 +1,26 @@
+# Docker 构建上下文黑名单
+#
+# 关键：PGuide-Manage/ruoyi-ui/node_modules 有 ~205MB，占了整个仓库 226MB 的九成。
+# 不排除掉的话每次 docker build 都要把这堆文件传给 daemon，构建会慢到不可用。
+
+# ---- 依赖与产物 ----
+**/node_modules
+**/target
+**/dist
+**/build
+
+# ---- 版本控制与 IDE ----
+.git
+.gitignore
+.idea
+*.iml
+.vscode
+
+# ---- 运行期数据 ----
+docker/data
+**/*.log
+**/logs
+
+# ---- 前端源码（本次不构建前端镜像；需要用 Node 16 本地跑）----
+PGuide-Front
+PGuide-Manage/ruoyi-ui

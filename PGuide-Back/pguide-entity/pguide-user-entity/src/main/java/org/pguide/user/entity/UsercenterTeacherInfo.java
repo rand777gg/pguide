@@ -59,8 +59,10 @@ public class UsercenterTeacherInfo implements Serializable {
 
     /**
      * 用户手机号
+     *
+     * 修复：同 UsercenterStudentInfo，原为 Integer 放不下 11 位手机号
      */
-    private Integer teacherPhonenumber;
+    private String teacherPhonenumber;
 
     /**
      * 用户邮箱号

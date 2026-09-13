@@ -1,0 +1,406 @@
+# ============================================================
+# PGuide 本地一键环境：中间件 + 后端服务
+#
+# 用法（在仓库根目录执行）：
+#   docker compose up -d                    # 只起中间件（MySQL + Redis）
+#   docker compose --profile full up -d     # 再加 Nacos + Elasticsearch
+#   docker compose --profile back up -d     # 再起 PGuide-Back 微服务全家桶
+#   docker compose --profile manage up -d   # 再起 RuoYi 管理后台
+#   docker compose --profile full --profile back --profile manage up -d   # 全量
+#
+#   docker compose ps                       # 看状态
+#   docker compose logs -f gateway          # 看某个服务日志
+#   docker compose --profile back build     # 只重新构建微服务镜像
+#   docker compose --profile back up -d --build
+#   docker compose down                     # 停止，保留数据
+#   docker compose down -v                  # 停止并清空数据（含数据库）
+#
+# 详细说明见 docker/README.md
+# ============================================================
+
+name: pguide-dev
+
+# ------------------------------------------------------------
+# 微服务公共环境变量
+#
+# 仓库里的 yml 来自公开整合版，所有连接信息都被脱敏成了 `**`
+# （不是笔误，是真的两个星号）。这里不逐个改源码，统一用环境变量覆盖：
+# Spring Boot 的 relaxed binding 让 SPRING_DATASOURCE_URL 这类变量
+# 优先级高于 yml 里的字面量。
+# ------------------------------------------------------------
+x-back-env: &back-env
+  # ---- Nacos ----
+  SPRING_CLOUD_NACOS_SERVER_ADDR: nacos:8848
+  SPRING_CLOUD_NACOS_USERNAME: nacos
+  SPRING_CLOUD_NACOS_PASSWORD: nacos
+  SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+  SPRING_CLOUD_NACOS_DISCOVERY_USERNAME: nacos
+  SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD: nacos
+  # 各服务 bootstrap.yml 里写死了不同的 namespace UUID + group=dev，本地没有那套配置。
+  # 直接关闭配置中心，只保留服务发现（网关的 lb:// 依赖它）。
+  SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+  SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED: "false"
+  # ---- Redis ----
+  SPRING_REDIS_HOST: redis
+  SPRING_REDIS_PORT: "6379"
+  SPRING_REDIS_PASSWORD: "${REDIS_PASSWORD:-pguide123}"
+  # ---- JVM ----
+  JAVA_OPTS: "-Xms256m -Xmx512m -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
+
+# ------------------------------------------------------------
+# 各库 JDBC 连接串
+# 原配置是 useSSL=true，本地无证书会握手失败，改成 false；
+# 补了 allowPublicKeyRetrieval（MySQL 8 caching_sha2_password 需要）。
+# ------------------------------------------------------------
+x-datasource: &ds
+  # 以下锚点分别给各服务引用，避免 5 个库的 URL 拼错
+  manage: &db-manage "jdbc:mysql://mysql:3306/pguide_manage?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&autoReconnect=true"
+  usercenter: &db-usercenter "jdbc:mysql://mysql:3306/pguide_usercenter?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&autoReconnect=true"
+  mms: &db-mms "jdbc:mysql://mysql:3306/pguide_project_mms?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&autoReconnect=true"
+  cms: &db-cms "jdbc:mysql://mysql:3306/pguide_index_cms?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&autoReconnect=true"
+  indexinfo: &db-indexinfo "jdbc:mysql://mysql:3306/pguide_index_info?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&autoReconnect=true"
+
+services:
+
+  # ==========================================================
+  # 中间件
+  # ==========================================================
+
+  mysql:
+    image: mysql:8.0.31
+    container_name: pguide-dev-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+      MYSQL_DATABASE: pguide_manage
+      TZ: Asia/Shanghai
+      # 关键：容器内不设 LANG 时，mysql 客户端会按 latin1 读 init/*.sql，
+      # 把中文双重编码成乱码（菜单名变成 ç³»ç»Ÿ...）。
+      LANG: C.UTF-8
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --lower_case_table_names=1
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=500
+    ports:
+      # 宿主机端口刻意偏移：3306 已被本机另一个项目的容器占用
+      - "${MYSQL_HOST_PORT:-13306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # init 脚本只在数据卷首次创建时执行一次。
+      # 改了 SQL 想重导：docker compose down -v && docker compose up -d
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-pguide123}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  redis:
+    image: redis:7.2
+    container_name: pguide-dev-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-pguide123}", "--appendonly", "yes"]
+    ports:
+      # 6379 同样被别的项目占用，走偏移端口
+      - "${REDIS_HOST_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-pguide123}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  nacos:
+    image: nacos/nacos-server:v2.2.3
+    container_name: pguide-dev-nacos
+    profiles: ["full", "back"]
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      JVM_XMS: 512m
+      JVM_XMX: 512m
+      # 鉴权必须开着。曾经试过 NACOS_AUTH_ENABLE=false，结果所有客户端仍然带着
+      # spring.cloud.nacos.username/password 去调 /v1/auth/users/login，
+      # 而鉴权关闭时这个接口直接返回 HTTP 500 → SecurityProxy 登录失败
+      # → gRPC 连接被判 UNHEALTHY → 服务启动报
+      # "NacosException: Client not connected, current status:UNHEALTHY"。
+      # 开启鉴权后客户端用默认账号 nacos/nacos 正常登录。
+      NACOS_AUTH_ENABLE: "true"
+      # 必须 >=32 字节；这是本地开发用的固定值，生产请更换
+      NACOS_AUTH_TOKEN: "SecretKey012345678901234567890123456789012345678901234567890123456789"
+      NACOS_AUTH_IDENTITY_KEY: serverIdentity
+      NACOS_AUTH_IDENTITY_VALUE: security
+    ports:
+      - "${NACOS_HOST_PORT:-18848}:8848"
+      - "${NACOS_GRPC_HOST_PORT:-19848}:9848"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8848/nacos/v1/console/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  elasticsearch:
+    image: elasticsearch:7.4.2
+    container_name: pguide-dev-es
+    profiles: ["full", "back"]
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${ES_HOST_PORT:-19200}:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # 数据库图形客户端（可选）：docker compose --profile tools up -d
+  adminer:
+    image: adminer:latest
+    container_name: pguide-dev-adminer
+    profiles: ["tools"]
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - "${ADMINER_HOST_PORT:-18081}:8080"
+
+  # ==========================================================
+  # PGuide-Back 微服务（--profile back）
+  #
+  # 7 个服务共用同一个 builder 阶段产出的 jar。BuildKit 会缓存编译层，
+  # 所以只真正执行一次 mvn install。
+  # ==========================================================
+
+  gateway:
+    profiles: ["back"]
+    container_name: pguide-dev-gateway
+    image: pguide/backend:gateway
+    build: &back-build
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        SERVICE_MODULE: pguide-gateway/sc-gateway
+        SERVICE_PORT: "666"
+    environment:
+      <<: *back-env
+    ports:
+      - "${GATEWAY_HOST_PORT:-666}:666"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  auth:
+    profiles: ["back"]
+    container_name: pguide-dev-auth
+    image: pguide/backend:auth
+    build:
+      <<: *back-build
+      args:
+        SERVICE_MODULE: pguide-auth
+        SERVICE_PORT: "888"
+    environment:
+      <<: *back-env
+      # 鉴权中心读 pguide_usercenter 库
+      SPRING_DATASOURCE_URL: *db-usercenter
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+    ports:
+      - "${AUTH_HOST_PORT:-888}:888"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  usercenter:
+    profiles: ["back"]
+    container_name: pguide-dev-usercenter
+    image: pguide/backend:usercenter
+    build:
+      <<: *back-build
+      args:
+        SERVICE_MODULE: pguide-business-providers/pguide-user-provider
+        SERVICE_PORT: "777"
+    environment:
+      <<: *back-env
+      SPRING_DATASOURCE_URL: *db-usercenter
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+    ports:
+      - "${USERCENTER_HOST_PORT:-777}:777"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  project-match:
+    profiles: ["back"]
+    container_name: pguide-dev-project-match
+    image: pguide/backend:project-match
+    build:
+      <<: *back-build
+      args:
+        SERVICE_MODULE: pguide-business-providers/pguide-project-match-provider
+        SERVICE_PORT: "12002"
+    environment:
+      <<: *back-env
+      SPRING_DATASOURCE_URL: *db-mms
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+    ports:
+      - "${PROJECT_MATCH_HOST_PORT:-12002}:12002"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  competition-manage:
+    profiles: ["back"]
+    container_name: pguide-dev-cms
+    image: pguide/backend:competition-manage
+    build:
+      <<: *back-build
+      args:
+        SERVICE_MODULE: pguide-business-providers/pguide-competition-manage-provider
+        SERVICE_PORT: "9000"
+    environment:
+      <<: *back-env
+      SPRING_DATASOURCE_URL: *db-cms
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+    ports:
+      - "${CMS_HOST_PORT:-9000}:9000"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  index-info:
+    profiles: ["back"]
+    container_name: pguide-dev-index-info
+    image: pguide/backend:index-info
+    build:
+      <<: *back-build
+      args:
+        SERVICE_MODULE: pguide-business-providers/pguide-index-info-provider
+        SERVICE_PORT: "1001"
+    environment:
+      <<: *back-env
+      # 注意：这个服务的数据源写在 bootstrap.yml（不是 application.yml），库是第 5 个库
+      SPRING_DATASOURCE_URL: *db-indexinfo
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+    ports:
+      - "${INDEX_INFO_HOST_PORT:-1001}:1001"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  search:
+    profiles: ["back"]
+    container_name: pguide-dev-search
+    image: pguide/backend:search
+    build:
+      <<: *back-build
+      args:
+        SERVICE_MODULE: pguide-business-providers/pguide-search-provider
+        SERVICE_PORT: "11001"
+    environment:
+      <<: *back-env
+      MYES_HOST: es
+      MYES_USERNAME: elastic
+      MYES_PASSWORD: ""
+      # 源码 bug：search-provider 的 bootstrap.yml 把 spring.application.name
+      # 误写成 pguide-competition-manage，会跟 CMS 服务抢同一个注册名。
+      # 用命令行参数覆盖（命令行优先级高于 bootstrap.yml，环境变量未必压得住）。
+      APP_ARGS: "--spring.application.name=pguide-search"
+    ports:
+      - "${SEARCH_HOST_PORT:-11001}:11001"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+
+  # ==========================================================
+  # RuoYi 管理后台（--profile manage）
+  # 独立 Maven 工程，不注册 Nacos，用 Druid 多数据源直连 4 个业务库
+  # ==========================================================
+
+  manage:
+    profiles: ["manage"]
+    container_name: pguide-dev-manage
+    image: pguide/manage:local
+    build:
+      context: .
+      dockerfile: docker/manage.Dockerfile
+    environment:
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: "6379"
+      SPRING_REDIS_PASSWORD: "${REDIS_PASSWORD:-pguide123}"
+      # 4 个 Druid 数据源
+      SPRING_DATASOURCE_DRUID_MASTER_URL: *db-manage
+      SPRING_DATASOURCE_DRUID_MASTER_USERNAME: root
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+      SPRING_DATASOURCE_DRUID_USER_URL: *db-usercenter
+      SPRING_DATASOURCE_DRUID_USER_USERNAME: root
+      SPRING_DATASOURCE_DRUID_USER_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+      SPRING_DATASOURCE_DRUID_MMS_URL: *db-mms
+      SPRING_DATASOURCE_DRUID_MMS_USERNAME: root
+      SPRING_DATASOURCE_DRUID_MMS_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+      SPRING_DATASOURCE_DRUID_CMS_URL: *db-cms
+      SPRING_DATASOURCE_DRUID_CMS_USERNAME: root
+      SPRING_DATASOURCE_DRUID_CMS_PASSWORD: "${MYSQL_ROOT_PASSWORD:-pguide123}"
+      # 源码里是 Windows 路径 D:/ruoyi/uploadPath，镜像里要改掉
+      RUOYI_PROFILE: /home/ruoyi/uploadPath
+      # pguide-back-mms-manage 的 PguideElasticSearchConfiguration 用
+      # @Value("${myes.host/username/password}") 读这三个值，而它们在
+      # ruoyi-admin/application.yml 里原本也是 `**`，被归一化脚本删掉了。
+      # 不补会直接启动失败：Could not resolve placeholder 'myes.password'。
+      # RestHighLevelClient 是懒连接，所以 manage profile 不带 ES 也能起
+      # （只是 CMS 的 ES 检索接口调不通，要用得加 --profile full）。
+      MYES_HOST: es
+      MYES_USERNAME: elastic
+      MYES_PASSWORD: ""
+      JAVA_OPTS: "-Xms256m -Xmx512m -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
+    ports:
+      - "${MANAGE_HOST_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:
+  es-data:

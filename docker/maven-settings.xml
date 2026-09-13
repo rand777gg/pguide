@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven 构建用 settings.xml
+
+  为什么要这个文件：
+  PGuide-Back 的 pom 没有声明任何仓库，也没配 mirror，Maven 会直连
+  repo.maven.apache.org。国内直连这个地址非常慢（实测 20 分钟只拉了 80MB，
+  而这个多模块工程首次构建需要 300MB+ 依赖）。
+
+  阿里云公共仓库是国内实测最稳的镜像。如果你在海外或有可用的代理，
+  删掉 docker/backend.Dockerfile 里 COPY 这一行的 settings.xml 即可，
+  或者把下面的 mirror 换成你自己的私服。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <mirrors>
+    <mirror>
+      <id>aliyun-public</id>
+      <name>阿里云公共仓库</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+  </mirrors>
+
+</settings>

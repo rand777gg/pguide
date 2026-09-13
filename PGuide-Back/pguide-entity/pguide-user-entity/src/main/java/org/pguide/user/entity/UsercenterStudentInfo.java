@@ -60,8 +60,15 @@ public class UsercenterStudentInfo implements Serializable {
 
     /**
      * 用户手机号
+     *
+     * 修复：原类型是 Integer，但 11 位手机号（如 13800000001 ≈ 1.38e10）
+     * 超出 Integer 上限 2.147e9，查询时会抛
+     *   java.sql.SQLDataException: Value '13800000001' is outside of valid range for type java.lang.Integer
+     * 导致 usercenter 的所有学生查询（含登录链路）失败。
+     * 数据库列是 varchar(11)，改成 String 最匹配；
+     * 姊妹工程 PGuide-Manage 里的同名实体用的也是 Long 而非 Integer。
      */
-    private Integer studentPhonenumber;
+    private String studentPhonenumber;
 
     /**
      * 用户邮箱号
