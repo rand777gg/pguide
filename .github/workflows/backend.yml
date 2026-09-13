@@ -1,0 +1,100 @@
+# ============================================================
+# 后端与基础设施 CI
+#
+# 覆盖两件事：
+#   1. PGuide-Back（59 模块）与 PGuide-Manage（RuoYi 二次开发）
+#      能否编译通过 —— 这两个是独立的 Maven 工程
+#   2. compose.yaml 是否仍然是合法可解析的编排文件
+#
+# 不在这里跑单元测试：后端几乎没有测试，而且跑起来需要 MySQL / Redis /
+# Nacos / ES，成本远高于收益。等后端补了测试再单独加 job。
+# ============================================================
+
+name: backend
+
+on:
+  push:
+    branches: [main, 'dev-*', 'feat-*', 'fix-*', 'ci-*']
+    paths:
+      - 'PGuide-Back/**'
+      - 'PGuide-Manage/**'
+      - 'compose.yaml'
+      - 'docker/**'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'PGuide-Back/**'
+      - 'PGuide-Manage/**'
+      - 'compose.yaml'
+      - 'docker/**'
+      - '.github/workflows/backend.yml'
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----------------------------------------------------------
+  # 两个 Maven 工程分别编译
+  # ----------------------------------------------------------
+  compile:
+    name: 编译 ${{ matrix.project }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      # 一个失败不要取消另一个，否则看不到完整情况
+      fail-fast: false
+      matrix:
+        include:
+          - project: PGuide-Back
+            directory: PGuide-Back
+          - project: PGuide-Manage
+            directory: PGuide-Manage/PGuide-Manage
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 两个工程都是 Java 8
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      # 注意：这里**不**挂 docker/maven-settings.xml 里的阿里云镜像。
+      # 那个镜像是给国内本地构建加速用的，GitHub runner 在海外，
+      # 用 Maven Central 反而更快。
+      - name: mvn install
+        working-directory: ${{ matrix.directory }}
+        run: mvn -B -ntp -DskipTests install
+
+  # ----------------------------------------------------------
+  # 编排文件校验
+  # ----------------------------------------------------------
+  compose:
+    name: 校验 compose.yaml
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # docker compose config 会解析整个文件、做变量插值、
+      # 校验服务定义与 depends_on 引用。语法或引用写错会直接失败。
+      # 加 --profile 是为了把带 profiles 的服务（nacos/es/back/manage）
+      # 也一起纳入校验，否则它们会被跳过。
+      - name: docker compose config
+        run: |
+          docker compose -f compose.yaml \
+            --profile full --profile back --profile manage --profile tools \
+            config --quiet
+          echo "compose.yaml 解析通过"
+
+      # shell 脚本必须有可执行权限且行尾是 LF —— 否则容器里会报
+      # bad interpreter。.gitattributes 已经保证 LF，这里再确认一次。
+      - name: 检查 shell 脚本行尾
+        run: |
+          if grep -rlU $'\r' docker/*.sh 2>/dev/null; then
+            echo "::error::docker/*.sh 含 CRLF 行尾，容器内会执行失败"
+            exit 1
+          fi
+          echo "shell 脚本行尾正常"
