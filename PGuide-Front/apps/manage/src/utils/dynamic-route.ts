@@ -160,6 +160,48 @@ export function isExternalLink(path: string): boolean {
   return /^https?:\/\//.test(path)
 }
 
+/** 外链菜单在路由表里的占位路径前缀（真实地址放在 meta.link） */
+const EXTERNAL_PATH_PREFIX = '/external'
+
+/**
+ * 外链菜单 → 站内的占位路径。
+ *
+ * ⚠️ 这不是「锦上添花」，是在修一个**登录直接失败的 bug**：
+ *
+ * RuoYi 基线的菜单「若依官网」（`sys_menu.menu_id = 4`）的 `path` 就是
+ * `http://ruoyi.vip`。而 vue-router 4 要求**顶层路由的 path 必须以 `/` 开头**，
+ * 否则 `router.addRoute()` 直接抛：
+ *
+ *   Route paths should start with a "/": "http://ruoyi.vip" should be "/http://ruoyi.vip"
+ *
+ * 这个异常出在路由守卫的 `generateRoutes()` 里 → 被 catch 掉后清会话回登录页，
+ * 用户看到的现象是「密码没错就是登不进去」，控制台只有一行 `生成动态路由失败`。
+ * 实际踩到过。
+ *
+ * 所以外链不当作站内路由：给一个 `/external/<slug>` 的安全路径占位，
+ * 真实地址放 `meta.link`，侧边栏按 `meta.link` 渲染成新窗口打开的 `<a>`
+ * （见 layout/components/SidebarItem.vue）。
+ */
+export function externalRoutePath(url: string): string {
+  const slug = url
+    .replace(/^https?:\/\//, '')
+    .replace(/[^\w]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+  return `${EXTERNAL_PATH_PREFIX}/${slug || 'link'}`
+}
+
+/**
+ * 兜底：顶层 path 必须以 `/` 开头。
+ *
+ * 外链是已知的一种情况，但后端菜单里 path 少写一个 `/` 同样能让整个登录炸掉。
+ * 与其让一条脏数据毁掉登录，不如补成合法路径 —— 页面最多落到 404，
+ * 至少能登进去、也能看见问题。
+ */
+function ensureAbsolutePath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`
+}
+
 /** 一个「组件找不到」的记录，用于最后汇总成一条日志 */
 interface MissingRef {
   routePath: string
@@ -198,19 +240,32 @@ function buildRouteRecords(
   for (const route of routes) {
     if (!route.path && !route.component) continue
 
-    const fullPath = isExternalLink(route.path)
-      ? route.path
-      : joinPath(basePath, route.path)
+    // 外链菜单（如「若依官网」path 就是 http://ruoyi.vip）不能当站内路由，
+    // 否则 vue-router 的 addRoute 会直接抛异常，整个登录都进不去
+    const external = isExternalLink(route.path)
+    const fullPath = external
+      ? externalRoutePath(route.path)
+      : ensureAbsolutePath(joinPath(basePath, route.path))
+
+    const meta: Record<string, unknown> = {
+      title: route.meta?.title ?? '',
+      icon: route.meta?.icon,
+      noCache: route.meta?.noCache ?? false,
+      hidden: route.hidden ?? false,
+    }
+    // 后端本来就会在 meta.link 里给一份外链地址，这里统一以 path 为准
+    if (route.meta?.link) meta.link = route.meta.link
+    if (external) {
+      meta.external = true
+      meta.link = route.path
+    }
 
     const record: RouteRecordRaw = {
       path: fullPath,
-      name: route.name,
-      meta: {
-        title: route.meta?.title ?? '',
-        icon: route.meta?.icon,
-        noCache: route.meta?.noCache ?? false,
-        hidden: route.hidden ?? false,
-      },
+      // 外链的 name 是后端从 URL 拼出来的（`Http://ruoyi.vip`），又怪又没用；
+      // 而且它不该进标签页（tags store 对没有 name 的路由直接跳过）
+      name: external ? undefined : route.name,
+      meta,
       children: route.children
         ? buildRouteRecords(route.children, fullPath, missing)
         : undefined,

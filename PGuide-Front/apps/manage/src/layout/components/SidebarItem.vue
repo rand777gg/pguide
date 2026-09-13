@@ -51,11 +51,38 @@ const displayIcon = computed(() => {
 })
 
 const parentIcon = computed(() => resolveMenuIcon(props.item.meta?.icon as string | undefined))
+
+/**
+ * 外链菜单（后端 `sys_menu.path` 是 http(s) 地址，如 RuoYi 自带的「若依官网」）。
+ *
+ * 这类菜单在路由表里只有个 `/external/xxx` 的占位路径（见 utils/dynamic-route.ts），
+ * 真实地址在 `meta.link`。侧边栏必须渲染成真正的 `<a target="_blank">`：
+ * 走 vue-router 的话会变成站内跳转，页面里根本没有那个组件。
+ */
+const externalLink = computed<string | null>(() => {
+  const link = (onlyOneChild.value?.meta?.link ?? props.item.meta?.link) as string | undefined
+  return link && isExternalLink(link) ? link : null
+})
 </script>
 
 <template>
+  <!-- 外链：新窗口打开，@click.stop 是为了不让 el-menu 的 router 模式再 push 一次 -->
+  <el-menu-item v-if="externalLink" :index="displayPath">
+    <a
+      class="sidebar-item__link"
+      :href="externalLink"
+      target="_blank"
+      rel="noopener noreferrer"
+      @click.stop
+    >
+      <el-icon v-if="displayIcon"><component :is="displayIcon" /></el-icon>
+      <!-- 用 span 而不是 #title 插槽：Element Plus 折叠态隐藏的正是菜单项里的 span -->
+      <span class="sidebar-item__title">{{ displayTitle }}</span>
+    </a>
+  </el-menu-item>
+
   <!-- 只有一个子节点（或没有子节点）：直接渲染成菜单项 -->
-  <el-menu-item v-if="onlyOneChild || visibleChildren.length === 0" :index="displayPath">
+  <el-menu-item v-else-if="onlyOneChild || visibleChildren.length === 0" :index="displayPath">
     <el-icon v-if="displayIcon"><component :is="displayIcon" /></el-icon>
     <template #title>{{ displayTitle }}</template>
   </el-menu-item>
@@ -75,3 +102,16 @@ const parentIcon = computed(() => resolveMenuIcon(props.item.meta?.icon as strin
     />
   </el-sub-menu>
 </template>
+
+<style scoped lang="scss">
+// 外链菜单项里的 <a> 要铺满整个菜单项，否则只有文字可点
+.sidebar-item__link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+</style>

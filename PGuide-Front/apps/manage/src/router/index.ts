@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { ElMessage } from 'element-plus/es'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { catchAllRoute } from '@/utils/dynamic-route'
@@ -109,10 +110,21 @@ router.beforeEach(async (to) => {
 
     return { ...to, replace: true }
   } catch (error) {
-    // 拿不到用户信息（token 过期 / 后端不可用）→ 清会话回登录页
+    /**
+     * 拿不到用户信息（token 过期 / 后端不可用）→ 清会话回登录页。
+     *
+     * ⚠️ 一定要把失败**说出来**：这里清了会话之后用户会看到「又回到登录页」，
+     * 很像「密码错了」，但实际是菜单/路由生成出的问题（真实踩过：
+     * 一条外链菜单的 path 是 http://ruoyi.vip，vue-router 直接抛异常，
+     * 现象就是「密码没错但登不进去」，控制台只有一行日志）。
+     */
     userStore.reset()
     permissionStore.reset()
     console.error('[manage] 生成动态路由失败', error)
+    ElMessage.error(
+      `菜单加载失败：${error instanceof Error ? error.message : String(error)}。` +
+        `请检查 sys_menu 表里的菜单配置。`,
+    )
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 })
