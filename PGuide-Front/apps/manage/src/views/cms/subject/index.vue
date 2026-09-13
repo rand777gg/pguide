@@ -7,8 +7,13 @@ import type { CmsSubjectDict } from '@/api/modules/business'
 /**
  * 学科字典管理。
  *
- * ⚠️ `subjectLevel` 后端返回的是**字符串**（实体声明为 String，数据库列是 int）。
- * 表单里用下拉给出固定取值，避免手输不一致导致学科树层级错乱。
+ * ⚠️ 两件容易搞混的事：
+ *
+ * 1. 权限前缀是 `manage:subjectdict`，**不是** `cmsmanage:subjectdict` ——
+ *    `cmsmanage` 只是 URL 前缀（`@RequestMapping("/cmsmanage/subjectdict")`）。
+ *    写混的表现是：管理员（*:*:*）一切正常，普通角色按钮消失 + 接口 403。
+ * 2. `subjectLevel` 后端返回的是**字符串**（实体声明为 String，数据库列是 int）。
+ *    表单里用下拉给出固定取值，避免手输不一致导致学科树层级错乱。
  */
 const columns: CrudColumn<CmsSubjectDict>[] = [
   { prop: 'subjectId', label: '学科ID', width: 100 },
@@ -50,7 +55,7 @@ const formFields: CrudFormField<CmsSubjectDict>[] = [
     resource="学科"
     :api="businessApi.cmsSubjectApi"
     id-key="subjectId"
-    permission="cmsmanage:subjectdict"
+    permission="manage:subjectdict"
     :columns="columns"
     :form-fields="formFields"
   />

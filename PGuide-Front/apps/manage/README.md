@@ -205,13 +205,45 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 |---|---|---|
 | 项目管理 | `mms/project/index` | `manage:projectinfo` |
 | 招募需求 | `mms/recruit/index` | `manage:recruitinfo` |
-| 竞赛管理 | `cms/competition/index` | `cmsmanage:cptinfo` |
-| 学科字典 | `cms/subject/index` | `cmsmanage:subjectdict` |
-| 学生信息 | `usercenter/student/index` | `project:info:student` |
-| 教师信息 | `usercenter/teacher/index` | `project:info:teacher` |
+| 竞赛管理 | `cms/competition/index` | `manage:cptinfo` |
+| 学科字典 | `cms/subject/index` | `manage:subjectdict` |
+| 学生信息 | `usercenter/student/index` | `project:info` |
+| 教师信息 | `usercenter/teacher/index` | `project:info` |
+
+> ⚠️ **权限前缀 ≠ URL 前缀**。竞赛、学科的接口路径是 `/cmsmanage/*`，
+> 权限串却是 `manage:*`；学生、教师的接口路径是 `/project/info/*`，
+> 权限串是 `project:info:*`。权限串只能从 Controller 的 `@PreAuthorize` 抄，
+> 从 URL 推是错的。
+
+### 三份数据必须完全一致
+
+同一个权限串出现在三个地方，**必须是同一个字符串**：
+
+| 位置 | 例子 |
+|---|---|
+| 后端 `@PreAuthorize` | `@ss.hasPermi('manage:cptinfo:add')` |
+| `sys_menu.perms`（95 脚本） | `manage:cptinfo:add` |
+| 页面上的 `permission` | `permission="manage:cptinfo"` |
+
+写不一致时的表现**极其阴险**：管理员有 `*:*:*` 所以一切正常，
+普通角色却是「按钮全消失 + 接口 403」——要等分配了另一个角色才会暴露。
+项目里真踩过两次（CMS 写成 `cmsmanage:*`、学生/教师写成 `project:info:student:*`）。
+
+所以有 `src/__tests__/permission-catalog.spec.ts` 把这件事变成门禁：
+以**后端 Java 源码为真值**，反向校验页面 `permission` 前缀、`business.ts`
+的接口路径、菜单 SQL 的 `component` 路径。后端改了权限串，这个测试会指出
+前端哪里没跟上（后端源码不在时会自动跳过这几条用例）。
+
+### 学生与教师共用一套权限点
+
+`UsercenterStudentInfoController` 与 `UsercenterTeacherInfoController` 的
+`@PreAuthorize` 用的都是 `project:info:*`（代码生成时没改前缀，老 ruoyi-ui 也这么用），
+于是「学生查询」这个权限点同时能查教师。要按学生/教师细分权限，得先改后端
+两个 Controller 的 `@PreAuthorize`，再同步菜单 SQL 与页面上的 `permission`。
 
 > 该脚本用 `INSERT IGNORE` 写，**可以重复执行**。docker 的 init 脚本只在数据卷
-> 首次创建时跑一次，已有数据库手工补即可（重复执行不会覆盖你在界面上改过的菜单）：
+> 首次创建时跑一次，已有数据库手工补即可（重复执行不会覆盖你在界面上改过的菜单，
+> 末尾的 UPDATE 段会把历史权限串修正成与后端一致）：
 > ```bash
 > docker exec -i -e MYSQL_PWD=pguide123 pguide-dev-mysql mysql -uroot --default-character-set=utf8mb4 \
 >   < docker/init/95-pguide-manage-menus.sql

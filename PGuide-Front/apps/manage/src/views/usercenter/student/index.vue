@@ -4,7 +4,18 @@ import { businessApi } from '@/api'
 import type { CrudColumn, CrudFormField } from '@/composables/crud-config'
 import type { UsercenterStudentInfo } from '@/api/modules/business'
 
-/** 学生信息管理。对应老工程 `views/user/userinfo/index.vue`。 */
+/**
+ * 学生信息管理。对应老工程 `views/user/userinfo/index.vue`。
+ *
+ * ⚠️ 权限前缀是 `project:info`，**不带 student**：
+ * `UsercenterStudentInfoController` 与 `UsercenterTeacherInfoController`
+ * 的 `@PreAuthorize` 用的是同一个 `project:info:*`（代码生成时没改前缀），
+ * 老 ruoyi-ui 也是这么写的。所以这里的值必须跟后端一致 ——
+ * 写成 `project:info:student` 的话，普通角色会「按钮消失 + 接口 403」，
+ * 而管理员因为有 *:*:* 看不出问题。
+ *
+ * 副作用是学生与教师共用同一套权限点，要细分得先改后端 @PreAuthorize。
+ */
 const columns: CrudColumn<UsercenterStudentInfo>[] = [
   { prop: 'studentId', label: 'ID', width: 80 },
   { prop: 'studentName', label: '姓名', width: 110, searchable: true },
@@ -48,7 +59,7 @@ const formFields: CrudFormField<UsercenterStudentInfo>[] = [
     resource="学生"
     :api="businessApi.studentApi"
     id-key="studentId"
-    permission="project:info:student"
+    permission="project:info"
     :columns="columns"
     :form-fields="formFields"
   />

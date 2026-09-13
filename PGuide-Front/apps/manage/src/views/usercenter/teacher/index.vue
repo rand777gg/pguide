@@ -4,7 +4,14 @@ import { businessApi } from '@/api'
 import type { CrudColumn, CrudFormField } from '@/composables/crud-config'
 import type { UsercenterTeacherInfo } from '@/api/modules/business'
 
-/** 教师信息管理。对应老工程 `views/user/teacherinfo/index.vue`。 */
+/**
+ * 教师信息管理。对应老工程 `views/user/teacherinfo/index.vue`。
+ *
+ * ⚠️ 权限前缀是 `project:info`（和「学生信息」**共用**同一套权限点）：
+ * `UsercenterTeacherInfoController` 的 @PreAuthorize 用的就是这个前缀，
+ * 老 ruoyi-ui 也一样。要按学生/教师细分权限，得先改后端 @PreAuthorize，
+ * 前端跟着改这里的值和 `95-pguide-manage-menus.sql` 里的权限串。
+ */
 const columns: CrudColumn<UsercenterTeacherInfo>[] = [
   { prop: 'teacherId', label: 'ID', width: 80 },
   { prop: 'teacherName', label: '姓名', width: 110, searchable: true },
@@ -45,7 +52,7 @@ const formFields: CrudFormField<UsercenterTeacherInfo>[] = [
     resource="教师"
     :api="businessApi.teacherApi"
     id-key="teacherId"
-    permission="project:info:teacher"
+    permission="project:info"
     :columns="columns"
     :form-fields="formFields"
   />

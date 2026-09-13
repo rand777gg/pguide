@@ -41,10 +41,10 @@ INSERT IGNORE INTO `sys_menu`
 VALUES
   (2010, '项目管理',   2000, 1, 'project',     'mms/project/index',        1, 0, 'C', '0', '0', 'manage:projectinfo:list',       'project',     'admin', '组队项目主表'),
   (2020, '招募需求',   2000, 2, 'recruit',     'mms/recruit/index',        1, 0, 'C', '0', '0', 'manage:recruitinfo:list',       'edit',        'admin', '项目招募需求'),
-  (2030, '竞赛管理',   2000, 3, 'competition', 'cms/competition/index',    1, 0, 'C', '0', '0', 'cmsmanage:cptinfo:list',        'competition', 'admin', '竞赛信息'),
-  (2040, '学科字典',   2000, 4, 'subject',     'cms/subject/index',        1, 0, 'C', '0', '0', 'cmsmanage:subjectdict:list',    'subject',     'admin', '学科分类字典，前端首页学科树的数据源'),
-  (2050, '学生信息',   2000, 5, 'student',     'usercenter/student/index', 1, 0, 'C', '0', '0', 'project:info:student:list',     'student',     'admin', '用户中心学生信息'),
-  (2060, '教师信息',   2000, 6, 'teacher',     'usercenter/teacher/index', 1, 0, 'C', '0', '0', 'project:info:teacher:list',     'teacher',     'admin', '用户中心教师信息');
+  (2030, '竞赛管理',   2000, 3, 'competition', 'cms/competition/index',    1, 0, 'C', '0', '0', 'manage:cptinfo:list',           'competition', 'admin', '竞赛信息'),
+  (2040, '学科字典',   2000, 4, 'subject',     'cms/subject/index',        1, 0, 'C', '0', '0', 'manage:subjectdict:list',       'subject',     'admin', '学科分类字典，前端首页学科树的数据源'),
+  (2050, '学生信息',   2000, 5, 'student',     'usercenter/student/index', 1, 0, 'C', '0', '0', 'project:info:list',             'student',     'admin', '用户中心学生信息'),
+  (2060, '教师信息',   2000, 6, 'teacher',     'usercenter/teacher/index', 1, 0, 'C', '0', '0', 'project:info:list',             'teacher',     'admin', '用户中心教师信息');
 
 -- ------------------------------------------------------------
 -- 按钮权限
@@ -68,25 +68,25 @@ VALUES
   (2023, '招募修改', 2020, 3, '', NULL, 1, 0, 'F', '0', '0', 'manage:recruitinfo:edit',   '#', 'admin'),
   (2024, '招募删除', 2020, 4, '', NULL, 1, 0, 'F', '0', '0', 'manage:recruitinfo:remove', '#', 'admin'),
   -- 竞赛管理
-  (2031, '竞赛查询', 2030, 1, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:cptinfo:query',   '#', 'admin'),
-  (2032, '竞赛新增', 2030, 2, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:cptinfo:add',     '#', 'admin'),
-  (2033, '竞赛修改', 2030, 3, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:cptinfo:edit',    '#', 'admin'),
-  (2034, '竞赛删除', 2030, 4, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:cptinfo:remove',  '#', 'admin'),
+  (2031, '竞赛查询', 2030, 1, '', NULL, 1, 0, 'F', '0', '0', 'manage:cptinfo:query',      '#', 'admin'),
+  (2032, '竞赛新增', 2030, 2, '', NULL, 1, 0, 'F', '0', '0', 'manage:cptinfo:add',        '#', 'admin'),
+  (2033, '竞赛修改', 2030, 3, '', NULL, 1, 0, 'F', '0', '0', 'manage:cptinfo:edit',       '#', 'admin'),
+  (2034, '竞赛删除', 2030, 4, '', NULL, 1, 0, 'F', '0', '0', 'manage:cptinfo:remove',     '#', 'admin'),
   -- 学科字典
-  (2041, '学科查询', 2040, 1, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:subjectdict:query',  '#', 'admin'),
-  (2042, '学科新增', 2040, 2, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:subjectdict:add',    '#', 'admin'),
-  (2043, '学科修改', 2040, 3, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:subjectdict:edit',   '#', 'admin'),
-  (2044, '学科删除', 2040, 4, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:subjectdict:remove', '#', 'admin'),
-  -- 学生信息
-  (2051, '学生查询', 2050, 1, '', NULL, 1, 0, 'F', '0', '0', 'project:info:student:query',  '#', 'admin'),
-  (2052, '学生新增', 2050, 2, '', NULL, 1, 0, 'F', '0', '0', 'project:info:student:add',    '#', 'admin'),
-  (2053, '学生修改', 2050, 3, '', NULL, 1, 0, 'F', '0', '0', 'project:info:student:edit',   '#', 'admin'),
-  (2054, '学生删除', 2050, 4, '', NULL, 1, 0, 'F', '0', '0', 'project:info:student:remove', '#', 'admin'),
+  (2041, '学科查询', 2040, 1, '', NULL, 1, 0, 'F', '0', '0', 'manage:subjectdict:query',  '#', 'admin'),
+  (2042, '学科新增', 2040, 2, '', NULL, 1, 0, 'F', '0', '0', 'manage:subjectdict:add',    '#', 'admin'),
+  (2043, '学科修改', 2040, 3, '', NULL, 1, 0, 'F', '0', '0', 'manage:subjectdict:edit',   '#', 'admin'),
+  (2044, '学科删除', 2040, 4, '', NULL, 1, 0, 'F', '0', '0', 'manage:subjectdict:remove', '#', 'admin'),
+  -- 学生信息（权限前缀与教师共用 project:info，见本文件末尾的说明）
+  (2051, '学生查询', 2050, 1, '', NULL, 1, 0, 'F', '0', '0', 'project:info:query',   '#', 'admin'),
+  (2052, '学生新增', 2050, 2, '', NULL, 1, 0, 'F', '0', '0', 'project:info:add',     '#', 'admin'),
+  (2053, '学生修改', 2050, 3, '', NULL, 1, 0, 'F', '0', '0', 'project:info:edit',    '#', 'admin'),
+  (2054, '学生删除', 2050, 4, '', NULL, 1, 0, 'F', '0', '0', 'project:info:remove',  '#', 'admin'),
   -- 教师信息
-  (2061, '教师查询', 2060, 1, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:query',  '#', 'admin'),
-  (2062, '教师新增', 2060, 2, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:add',    '#', 'admin'),
-  (2063, '教师修改', 2060, 3, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:edit',   '#', 'admin'),
-  (2064, '教师删除', 2060, 4, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:remove', '#', 'admin');
+  (2061, '教师查询', 2060, 1, '', NULL, 1, 0, 'F', '0', '0', 'project:info:query',   '#', 'admin'),
+  (2062, '教师新增', 2060, 2, '', NULL, 1, 0, 'F', '0', '0', 'project:info:add',     '#', 'admin'),
+  (2063, '教师修改', 2060, 3, '', NULL, 1, 0, 'F', '0', '0', 'project:info:edit',    '#', 'admin'),
+  (2064, '教师删除', 2060, 4, '', NULL, 1, 0, 'F', '0', '0', 'project:info:remove',  '#', 'admin');
 
 -- ------------------------------------------------------------
 -- 导出按钮权限
@@ -104,10 +104,53 @@ INSERT IGNORE INTO `sys_menu`
 VALUES
   (2015, '项目导出', 2010, 5, '', NULL, 1, 0, 'F', '0', '0', 'manage:projectinfo:export',    '#', 'admin'),
   (2025, '招募导出', 2020, 5, '', NULL, 1, 0, 'F', '0', '0', 'manage:recruitinfo:export',    '#', 'admin'),
-  (2035, '竞赛导出', 2030, 5, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:cptinfo:export',     '#', 'admin'),
-  (2045, '学科导出', 2040, 5, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:subjectdict:export', '#', 'admin'),
+  (2035, '竞赛导出', 2030, 5, '', NULL, 1, 0, 'F', '0', '0', 'manage:cptinfo:export',        '#', 'admin'),
+  (2045, '学科导出', 2040, 5, '', NULL, 1, 0, 'F', '0', '0', 'manage:subjectdict:export',    '#', 'admin'),
   -- 学生与教师两个 Controller 的 @PreAuthorize 用的是**同一个**前缀
   -- （`UsercenterStudentInfoController` / `UsercenterTeacherInfoController`
   -- 都是 `project:info:*`），所以这两行的权限串相同。
   (2055, '学生导出', 2050, 5, '', NULL, 1, 0, 'F', '0', '0', 'project:info:export',          '#', 'admin'),
   (2065, '教师导出', 2060, 5, '', NULL, 1, 0, 'F', '0', '0', 'project:info:export',          '#', 'admin');
+
+-- ------------------------------------------------------------
+-- 修正：权限串必须与后端 @PreAuthorize 完全一致
+--
+-- 上面用的是 `INSERT IGNORE`，对**已经存在**的行不会覆盖，
+-- 所以历史数据要用 UPDATE 修。这里修的是两类真实的不一致：
+--
+--   1. CMS 两个菜单写成了 `cmsmanage:*`，但 `CmsCptInfoController` /
+--      `CmsSubjectDictController` 的 @PreAuthorize 用的是 `manage:*`。
+--      （`cmsmanage` 只是 URL 前缀，不是权限前缀。）
+--   2. 学生/教师菜单写成了 `project:info:student:*` / `project:info:teacher:*`，
+--      但两个 Controller 用的都是 `project:info:*`。
+--
+-- 这类错误的典型表现：**管理员一切正常**（他有 *:*:*），
+-- 而普通角色按钮消失、接口 403 —— 所以很容易蒙混过关，值得当成一个坑记下来。
+--
+-- UPDATE 是幂等的：写的就是目标值，重复执行无副作用。
+-- ------------------------------------------------------------
+UPDATE `sys_menu` SET `perms` = 'manage:cptinfo:list'       WHERE `menu_id` = 2030;
+UPDATE `sys_menu` SET `perms` = 'manage:cptinfo:query'      WHERE `menu_id` = 2031;
+UPDATE `sys_menu` SET `perms` = 'manage:cptinfo:add'        WHERE `menu_id` = 2032;
+UPDATE `sys_menu` SET `perms` = 'manage:cptinfo:edit'       WHERE `menu_id` = 2033;
+UPDATE `sys_menu` SET `perms` = 'manage:cptinfo:remove'     WHERE `menu_id` = 2034;
+UPDATE `sys_menu` SET `perms` = 'manage:cptinfo:export'     WHERE `menu_id` = 2035;
+
+UPDATE `sys_menu` SET `perms` = 'manage:subjectdict:list'   WHERE `menu_id` = 2040;
+UPDATE `sys_menu` SET `perms` = 'manage:subjectdict:query'  WHERE `menu_id` = 2041;
+UPDATE `sys_menu` SET `perms` = 'manage:subjectdict:add'    WHERE `menu_id` = 2042;
+UPDATE `sys_menu` SET `perms` = 'manage:subjectdict:edit'   WHERE `menu_id` = 2043;
+UPDATE `sys_menu` SET `perms` = 'manage:subjectdict:remove' WHERE `menu_id` = 2044;
+UPDATE `sys_menu` SET `perms` = 'manage:subjectdict:export' WHERE `menu_id` = 2045;
+
+UPDATE `sys_menu` SET `perms` = 'project:info:list'         WHERE `menu_id` = 2050;
+UPDATE `sys_menu` SET `perms` = 'project:info:query'        WHERE `menu_id` = 2051;
+UPDATE `sys_menu` SET `perms` = 'project:info:add'          WHERE `menu_id` = 2052;
+UPDATE `sys_menu` SET `perms` = 'project:info:edit'         WHERE `menu_id` = 2053;
+UPDATE `sys_menu` SET `perms` = 'project:info:remove'       WHERE `menu_id` = 2054;
+
+UPDATE `sys_menu` SET `perms` = 'project:info:list'         WHERE `menu_id` = 2060;
+UPDATE `sys_menu` SET `perms` = 'project:info:query'        WHERE `menu_id` = 2061;
+UPDATE `sys_menu` SET `perms` = 'project:info:add'          WHERE `menu_id` = 2062;
+UPDATE `sys_menu` SET `perms` = 'project:info:edit'         WHERE `menu_id` = 2063;
+UPDATE `sys_menu` SET `perms` = 'project:info:remove'       WHERE `menu_id` = 2064;
