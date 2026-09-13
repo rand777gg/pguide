@@ -59,6 +59,35 @@ try {
 
 **不要用 `error.message.includes('xxx')` 判断错误类型** —— 后端改文案就失效。
 
+### ⚠️ 实体类型声明 ≠ 接口实际返回
+
+写类型时**必须以实测的响应体为准**，不能照抄后端实体类的字段类型。
+
+真实案例（2026-09 实测）：`GET /api/cms/subject/tree` 返回
+
+```json
+{ "subjectId": 1, "subjectName": "数学建模", "subjectLevel": "1", "parentId": 0 }
+```
+
+注意 **`subjectLevel` 是字符串 `"1"`**，因为后端实体
+`CmsSubjectDict.subjectLevel` 声明成了 `String`（而数据库列是 `int`）。
+
+第一版前端按 `number` 定义，结果 `node.subjectLevel === 1` 永远为 false，
+兜底分支成了死代码 —— **lint 和类型检查都不会报错**，
+因为类型是我们自己写错的"权威来源"。
+
+**做法**：
+
+1. 新增接口时先 `curl` 一次真实响应，照着响应写类型
+2. 类型来源可疑时用联合类型或宽松类型 + 注释说明，别硬断言
+3. 为这类"格式不确定"的字段补一条测试（参考
+   `apps/match/src/services/__tests__/subject.spec.ts`）
+
+```bash
+# 拿真实响应（token 从浏览器 localStorage 里取）
+curl.exe -s "http://localhost:666/api/cms/subject/tree" -H "token: <token>"
+```
+
 ---
 
 ## 3. 新增一个接口的完整流程

@@ -7,8 +7,17 @@
 export interface SubjectNode {
   subjectId: number
   subjectName: string
-  /** 层级，1 开始 */
-  subjectLevel: number
+  /**
+   * 层级，1 开始。
+   *
+   * ⚠️ 类型是 **string 而不是 number**，这是实测出来的：
+   * 后端实体 `CmsSubjectDict.subjectLevel` 声明为 String（数据库列却是 int），
+   * 所以接口返回的是 `"subjectLevel":"1"`（带引号的字符串）。
+   *
+   * 踩坑记录：第一版按 number 写的，导致 subjectLevel === 1 这种比较永远为 false，
+   * 兜底逻辑变成死代码。比较层级时请用 `Number(node.subjectLevel)`。
+   */
+  subjectLevel: string
   parentId?: number
 }
 

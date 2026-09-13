@@ -27,11 +27,14 @@ export async function loadSubjectTree(): Promise<SubjectTreeResult> {
   const tree = buildSubjectTree(adjacency)
 
   // 兜底：某些数据可能不带 parentId，只有一级节点的邻接表。
-  // 若邻接表里没有 '0' 这个 key，就退化成用 subjectLevel === 1 的节点当根。
+  // 若邻接表里没有 '0' 这个 key，就退化成用 level === 1 的节点当根。
+  //
+  // 注意 Number(...)：后端返回的 subjectLevel 是**字符串** "1"，
+  // 直接写 === 1 永远是 false（这个坑实测踩过）。
   if (tree.length === 0) {
     const all = Object.values(adjacency).flat()
     const roots: SubjectTreeNode[] = all
-      .filter((node) => node.subjectLevel === 1)
+      .filter((node) => Number(node.subjectLevel) === 1)
       .map((node) => ({ ...node, children: [] }))
     return { tree: roots, flat: roots }
   }
