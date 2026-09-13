@@ -10,7 +10,8 @@
   },
   "scripts": {
     "dev": "pnpm --filter @pguide/match dev",
-    "build": "pnpm -r --filter './apps/*' build",
+    "dev:auth": "pnpm --filter @pguide/auth dev",
+    "build": "pnpm -r --filter \"./apps/*\" build",
     "build:match": "pnpm --filter @pguide/match build",
     "preview": "pnpm --filter @pguide/match preview",
     "type-check": "pnpm -r type-check",
@@ -18,7 +19,7 @@
     "lint:fix": "pnpm -r lint:fix",
     "format": "prettier --write \"{apps,packages}/**/*.{ts,vue,json,css,scss,md}\"",
     "format:check": "prettier --check \"{apps,packages}/**/*.{ts,vue,json,css,scss,md}\"",
-    "test": "pnpm -r test",
+    "test": "pnpm -r --workspace-concurrency=1 test",
     "clean": "pnpm -r exec rimraf node_modules dist && rimraf node_modules"
   },
   "devDependencies": {

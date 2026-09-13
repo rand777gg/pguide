@@ -8,6 +8,7 @@
  * 由 Vite 负责转译，不单独产出 dist。
  */
 
+export * from './constants/auth'
 export * from './constants/http-status'
 export * from './constants/storage-keys'
 export * from './types/user'

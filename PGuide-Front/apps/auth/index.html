@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>%VITE_APP_TITLE%</title>
+    <style>
+      /* 首屏 loading 遮罩：等 JS 加载完再移除，避免白屏 */
+      #app-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: linear-gradient(-45deg, rgba(100, 201, 201, 0.5), #97dfd2, #81d9c4, #88d9e6);
+        background-size: 400% 400%;
+        animation: app-loading-move 12s ease infinite;
+        z-index: 9999;
+      }
+      #app-loading .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ffffff;
+        animation: app-loading-pulse 1.2s infinite ease-in-out;
+      }
+      #app-loading .dot:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      #app-loading .dot:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+      @keyframes app-loading-move {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
+      }
+      @keyframes app-loading-pulse {
+        0%,
+        70%,
+        100% {
+          transform: scale3D(1, 1, 1);
+          opacity: 1;
+        }
+        35% {
+          transform: scale3D(0.4, 0.4, 1);
+          opacity: 0.5;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="app-loading">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

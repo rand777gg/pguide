@@ -18,10 +18,11 @@ PGuide-Front/
 │   └── api/                  @pguide/api：axios 客户端 + 接口定义
 │
 ├── apps/                     ← 新的应用
-│   └── match/                @pguide/match：组队中心
+│   ├── match/                @pguide/match：组队中心（:4000）
+│   └── auth/                 @pguide/auth：统一鉴权中心（:99）
 │
-├── pguide-auth-ui/           ⚠️ 旧 Vue2，待迁移
-├── pguide-match-ui/          ⚠️ 旧 Vue2，待迁移（已被 apps/match 取代）
+├── pguide-auth-ui/           ⚠️ 旧 Vue2，已被 apps/auth 取代
+├── pguide-match-ui/          ⚠️ 旧 Vue2，已被 apps/match 取代
 └── pguide-ui-demo/           ⚠️ 旧 Vue2，动效试验页，可删
 ```
 
@@ -56,14 +57,15 @@ docker compose --profile full --profile back up -d
 | 命令 | 作用 |
 |---|---|
 | `pnpm dev` | 启动组队中心 dev server（:4000，带 HMR） |
+| `pnpm dev:auth` | 启动鉴权中心 dev server（:99） |
 | `pnpm build` | 类型检查 + 构建全部应用 |
 | `pnpm build:match` | 只构建组队中心 |
-| `pnpm preview` | 预览构建产物 |
+| `pnpm preview` | 预览组队中心构建产物 |
 | `pnpm type-check` | 只跑 vue-tsc |
 | `pnpm lint` | ESLint（0 warning 才算过） |
 | `pnpm lint:fix` | ESLint 自动修复 |
 | `pnpm format` | Prettier 格式化 |
-| `pnpm test` | Vitest |
+| `pnpm test` | Vitest（**串行**跑各包，并行会让 vitest worker 崩） |
 
 提交前必须 `pnpm lint && pnpm type-check && pnpm test` 全绿。
 
@@ -93,7 +95,7 @@ VITE_AUTH_GUARD=false                        # 开发期跳过登录守卫
 | 应用 | 原技术栈 | 状态 | 备注 |
 |---|---|---|---|
 | 组队中心 | Vue2 + Element UI + vue-cli | ✅ **已迁移** → `apps/match` | 页面、路由、API 层、鉴权流程全部重写 |
-| 鉴权中心 | Vue2 + vue-cli（无 UI 库） | ⏳ 待迁移 | 见下方"已知缺口" |
+| 鉴权中心 | Vue2 + vue-cli（无 UI 库） | ✅ **已迁移** → `apps/auth` | 修正了 `#/redirect` 参数解析错误；SSO 全链路已实测打通 |
 | 门户 / 首页 | Vue2 | ❌ 不在此仓库 | 只在私有前端仓 |
 | 管理端 UI | Vue2 | ❌ 不在此仓库 | 只在私有前端仓 |
 | 后台界面 | RuoYi 自带 ruoyi-ui | ⏸ 保持现状 | Vue2 + Element UI，与 RuoYi 版本绑定，暂不迁移 |
@@ -125,17 +127,17 @@ VITE_AUTH_GUARD=false                        # 开发期跳过登录守卫
 
 ### 已知缺口（下一步）
 
-1. **鉴权中心（`pguide-auth-ui`）还没迁移。** 它的 `#/redirect?code=&sendUrl=`
-   参数解析是坏的（`searchParams` 读不到 `#` 之后的内容），
-   重写时必须修掉。契约见 `dev-manual/06-鉴权与会话.md`。
-   当前整条登录链路之所以能通，是因为一次性 code 存在 localStorage 而不是 URL 里。
-2. **热门项目 / 需求市场用的是占位数据。** 后端没有列表接口，
+1. **热门项目 / 需求市场用的是占位数据。** 后端没有列表接口，
    集中在 `apps/match/src/services/project.ts`，接口就绪后只改这一个文件。
-3. **`CreatedResume` 只有表单骨架**，没有提交接口（后端也没有简历接口）。
-4. **`DetailPage` 是空列表**，等 `/mms/project/list`。
-5. **测试覆盖率低。** 目前只有 2 个测试文件（学科树转换、storage 封装）。
-   优先补纯函数和 store 的 action，见 `dev-manual/08-质量门禁.md`。
-6. **还没有 CI。** 建议的流水线写在 `dev-manual/08-质量门禁.md` 第 6 节。
+2. **`CreatedResume` 只有表单骨架**，没有提交接口（后端也没有简历接口）。
+3. **`DetailPage` 是空列表**，等 `/mms/project/list`。
+4. **首页学科树需要登录才看得到。** `/api/cms/subject/tree` 不在网关白名单里
+   （白名单只有 `/api/auth/**`），未登录访问会 401。
+   学科树是公开字典数据，建议后端把它加进白名单，见
+   `../dev-manual/06-鉴权与会话.md` 第 8 节。
+5. **测试覆盖率仍然低。** 目前 3 个包共 28 个用例，集中在纯逻辑和 store。
+   优先补纯函数和 store 的 action，见 `../dev-manual/08-质量门禁.md`。
+6. **还没有 CI。** 建议的流水线写在 `../dev-manual/08-质量门禁.md` 第 6 节。
 
 ---
 

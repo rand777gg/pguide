@@ -10,6 +10,44 @@ import { authRequest, get, post, request } from '../http'
  *   - 走 `get` / `post`：普通业务接口，返回统一 JsonResult
  */
 
+/**
+ * 子系统登录请求体，对应后端 `SubSystemLoginBody`。
+ *
+ * 注意后端那边 `SubSystemLoginBody extends LoginBody` 并且**重复声明**了
+ * account / password / code / uuid / redirectUrl，同时新增 tokenCode。
+ * 也就是实际需要的字段就是下面这些。
+ */
+export interface SubSystemLoginBody {
+  account: string
+  password: string
+  /** 验证码 */
+  code: string
+  /** 验证码对应的 uuid */
+  uuid: string
+  /** 登录完成后要跳回的子应用地址 */
+  redirectUrl: string
+  /** 子系统传来的一次性 code */
+  tokenCode: string
+  /** 系统类型，见后端 AuthConst.SystemTypeConst */
+  sysType?: string
+  /** 用户类型，见后端 AuthConst.UserTypeConst */
+  userType?: string
+}
+
+/** 子系统登录响应，对应后端 `SubSystemLoginDTO` */
+export interface SubSystemLoginResult {
+  token: string
+  redirectUrl: string
+}
+
+/** 第三方登录方式，对应 `ThirdPartyLogin` 实体 */
+export interface ThirdPartyItem {
+  thirdPartyId: number
+  thirdPartyName: string
+  thirdPartyImg?: string
+  thirdPartyLinkUrl?: string
+}
+
 /** 从后端拿验证码图片 */
 export function fetchCaptcha() {
   return request<CaptchaResult>({ url: '/auth/getCaptch', method: 'GET' })
@@ -60,9 +98,27 @@ export function checkCaptcha(uuid: string, code: string) {
   return get<string>('/auth/checkCaptch', { uuid, code })
 }
 
-/** 子系统登录（带 tokenCode 的版本），保留以兼容旧流程 */
-export function subSystemLogin(body: LoginBody) {
-  return post<{ token: string; redirectUrl?: string }>('/auth/login/other', body)
+/**
+ * 子系统登录（在鉴权中心页面上完成）。
+ *
+ * ⚠️ 修正记录：第一版这里写的是 `POST /auth/login/other`，是错的。
+ * 真实端点是 `POST /api/auth/authCenter/login`
+ * （`SubSystemLoginController.loginInAuthCenter`），
+ * 请求体是 `SubSystemLoginBody`，返回 `{ token, redirectUrl }`。
+ *
+ * 与鉴权中心自身登录的区别：多一个 `tokenCode`，
+ * 它是子系统跳转过来时生成的一次性 code，用来把 token 关联给子系统。
+ */
+export function subSystemLogin(body: SubSystemLoginBody) {
+  return post<SubSystemLoginResult>('/auth/authCenter/login', body)
+}
+
+/**
+ * 第三方登录方式列表（`ThirdPartyController`，GET /api/auth/third）。
+ * 对应 third_party_login 表。
+ */
+export function fetchThirdPartyList() {
+  return get<ThirdPartyItem[]>('/auth/third')
 }
 
 export type { ApiResult }

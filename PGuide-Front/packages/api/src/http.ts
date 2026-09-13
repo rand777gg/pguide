@@ -3,6 +3,7 @@ import { HTTP_STATUS, STORAGE_KEYS, readStorage, removeStorage, writeStorage } f
 import type { ApiResult } from '@pguide/shared'
 import { getApiConfig } from './config'
 import type { AuthRedirectPayload } from './config'
+import { buildAuthRedirectUrl } from './modules/auth-redirect'
 
 /**
  * 统一业务异常。
@@ -198,18 +199,25 @@ export async function authRequest<T>(config: AxiosRequestConfig): Promise<T> {
 /**
  * 跳转到统一鉴权中心。
  *
- * 流程（与 Vue2 版保持一致，后端约定不能改）：
+ * 流程（后端约定，见 RedirectHelper.doRedirectMemory）：
  *   1. 生成一个 uuid 作为一次性 code，存本地
- *   2. 跳到 `${redirectUrl}#/redirect?code=<uuid>&sendUrl=<本应用地址>`
- *   3. 用户在鉴权中心登录完成后，会带着 code 回跳到本应用
+ *   2. 跳到 `${redirectUrl}redirect?code=<uuid>&sendUrl=<本应用地址>`
+ *      （redirectUrl 是后端配置的 pguide.server.path.authPage，
+ *        即鉴权中心前端的地址）
+ *   3. 用户在鉴权中心登录完成后，会带着 code 回跳到 sendUrl
  *   4. 应用启动时用这个 code 调 `/auth/authCenter/tokenEx` 换真正的 token
+ *
+ * URL 的构造与解析统一收在 modules/auth-redirect.ts 里 ——
+ * 那是业务应用与鉴权中心之间的协议，两边共用一份实现。
  */
 function performRedirect(payload: AuthRedirectPayload): void {
   const code = createTokenCode()
   writeStorage(STORAGE_KEYS.TOKEN_CODE, code)
 
-  const sendUrl = payload.sendUrl
-  const url = `${payload.redirectUrl}#/redirect?code=${code}&sendUrl=${encodeURIComponent(sendUrl)}`
+  const url = buildAuthRedirectUrl(payload.redirectUrl, {
+    code,
+    sendUrl: payload.sendUrl,
+  })
 
   const redirect = getApiConfig().onRedirect
   if (redirect) {

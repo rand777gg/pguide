@@ -35,6 +35,15 @@ export * as cmsApi from './modules/cms'
 export * as subjectApi from './modules/subject'
 export * as mmsApi from './modules/mms'
 
+export {
+  AUTH_REDIRECT_PATH,
+  buildAuthRedirectUrl,
+  parseAuthRedirectParams,
+  toCaptchaDataUrl,
+} from './modules/auth-redirect'
+export type { AuthRedirectParams } from './modules/auth-redirect'
+export type { SubSystemLoginBody, SubSystemLoginResult, ThirdPartyItem } from './modules/auth'
+
 export { buildSubjectTree } from './modules/cms'
 export type { SubjectAdjacencyList, SubjectNode, SubjectTreeNode, CompetitionInfo } from './modules/cms'
 export type { ProjectCreatedVo, ProjectTypeLevel, ProjectOpenLevel } from './modules/mms'
