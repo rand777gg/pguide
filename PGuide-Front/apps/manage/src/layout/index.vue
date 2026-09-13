@@ -3,14 +3,14 @@ import { computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 import SidebarMenu from './components/SidebarMenu.vue'
 import Navbar from './components/Navbar.vue'
+import TagsView from './components/TagsView.vue'
 import AppMain from './components/AppMain.vue'
 
 /**
- * 后台布局：左侧菜单 + 顶部导航 + 主内容区。
+ * 后台布局：左侧菜单 + 顶部导航 + 多标签页 + 主内容区。
  *
- * 老 ruoyi-ui 的布局还有 TagsView（多标签页）和 Settings（主题设置抽屉），
- * 这里先不搬 —— 标签页功能对当前规模用处不大，主题设置更是低频。
- * 需要的话可以按同样的方式加进 layout/components。
+ * 老 ruoyi-ui 的布局还有 Settings（主题设置抽屉）没搬 —— 低频功能，
+ * 而且主题变量已经在 styles 里统一定义，需要时再加。
  */
 const appStore = useAppStore()
 
@@ -27,6 +27,9 @@ const collapsed = computed(() => appStore.sidebarCollapsed)
       <el-header class="layout__header">
         <Navbar />
       </el-header>
+
+      <!-- 多标签页：切换已打开过的页面，关掉标签同时释放它的 keep-alive 缓存 -->
+      <TagsView />
 
       <el-main class="layout__content">
         <AppMain />
