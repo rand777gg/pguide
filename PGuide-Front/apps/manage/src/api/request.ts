@@ -172,7 +172,39 @@ export const http = {
   raw: <T>(url: string, params?: object) => requestRaw<T>({ url, method: 'GET', params }),
 }
 
-/** 下载类接口（导出 Excel）。RuoYi 返回的是 blob。 */
+/**
+ * 读 Blob 的文本内容。
+ *
+ * 优先用 `Blob.prototype.text()`；拿不到就用 FileReader 兜底 ——
+ * 浏览器都支持前者，但 jsdom（测试环境）的部分版本没有实现，
+ * 不兜底的话这段错误识别逻辑在测试里根本跑不起来。
+ */
+async function readBlobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') return blob.text()
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(new Error('读取响应内容失败'))
+    reader.readAsText(blob)
+  })
+}
+
+/**
+ * 下载类接口（导出 Excel）。
+ *
+ * 两个坑：
+ *
+ * 1. RuoYi 的导出是 **POST + query 参数**（不是 body），
+ *    和 ruoyi-ui 的 `download('system/user/export', queryParams, filename)` 一致。
+ * 2. 导出成功返回的是 xlsx 二进制，**失败时却返回 JSON**
+ *    （全局异常处理器把 `AjaxResult` 写进了响应体，HTTP 状态码可能还是 200）。
+ *    这种响应如果原样当文件下载，用户会得到一个文件名很像 Excel、
+ *    打开却报损坏的文件。所以这里嗅探一下 content-type，是 JSON 就抛异常。
+ *
+ * 另外：ExcelUtil 是直接把字节写进响应流的，**不设置 Content-Disposition**，
+ * 文件名只能由调用方自己拼（见 utils/file.ts 的 buildExportFilename）。
+ */
 export async function download(url: string, params?: object): Promise<Blob> {
   const response = await getHttp().request<Blob>({
     url,
@@ -180,5 +212,49 @@ export async function download(url: string, params?: object): Promise<Blob> {
     params,
     responseType: 'blob',
   })
+
+  const blob = response.data
+  if (blob.type.includes('json')) {
+    const text = await readBlobText(blob)
+    let body: RuoYiResult | undefined
+    try {
+      body = JSON.parse(text) as RuoYiResult
+    } catch {
+      body = undefined
+    }
+    if (!body) {
+      throw new RuoYiError(-1, '导出失败：后端返回的不是 Excel 文件')
+    }
+    // code 非 200 时 ensureSuccess 会抛出带 msg 的 RuoYiError
+    ensureSuccess(body)
+    throw new RuoYiError(body.code, body.msg || '导出失败')
+  }
+
+  return blob
+}
+
+/**
+ * 上传类接口（Excel 导入）。
+ *
+ * 注意**不要手动设置 `Content-Type: multipart/form-data`** ——
+ * 边界串（boundary）由浏览器/axios 生成，手写会漏掉 boundary，
+ * 后端会报 "Current request is not a multipart request"。
+ *
+ * RuoYi 的 `SysUserController.importData(MultipartFile file, boolean updateSupport)`
+ * 把 `updateSupport` 当普通请求参数读，所以走 `params`，文件走 form-data。
+ * 返回值里导入结果文案在 `msg` 字段（`success(message)`）。
+ */
+export async function upload<T = unknown>(
+  url: string,
+  formData: FormData,
+  params?: object,
+): Promise<RuoYiResult<T>> {
+  const response = await getHttp().request<RuoYiResult<T>>({
+    url,
+    method: 'POST',
+    data: formData,
+    params,
+  })
+  ensureSuccess(response.data)
   return response.data
 }

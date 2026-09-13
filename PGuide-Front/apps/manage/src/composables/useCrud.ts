@@ -1,4 +1,4 @@
-import { reactive, ref, type Ref } from 'vue'
+import { computed, reactive, ref, type Ref } from 'vue'
 // Element Plus 的这两个是**函数式 API**，不能靠模板自动解析，必须显式引入。
 // 从 `element-plus/es` 具名引入是可以被 tree-shaking 的；
 // 而 `from 'element-plus'`（根入口 barrel）会把整个组件库拉进产物，
@@ -6,6 +6,7 @@ import { reactive, ref, type Ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus/es'
 import type { CrudApi } from '@/api'
 import { RuoYiError } from '@/api'
+import { buildExportFilename, saveBlobAsFile } from '@/utils/file'
 
 /**
  * 通用 CRUD 组合式函数 —— 列表页的全部状态与行为。
@@ -74,9 +75,16 @@ export function useCrud<T extends object>(options: UseCrudOptions<T>) {
 
   const loading = ref(false)
   const submitting = ref(false)
+  const exporting = ref(false)
+  const importing = ref(false)
   const list: Ref<T[]> = ref([]) as Ref<T[]>
   const total = ref(0)
   const selectedIds = ref<Array<number | string>>([])
+
+  /** 接口层有没有导出能力（菜单/部门没有 /export，所以要看接口而不是看配置） */
+  const canExport = computed(() => typeof api.exportFile === 'function')
+  /** 同一份判断，导入同理 —— CrudPage 用它决定要不要渲染按钮 */
+  const canImport = computed(() => typeof api.importFile === 'function')
 
   const query = reactive<CrudQuery>({
     pageNum: 1,
@@ -224,16 +232,98 @@ export function useCrud<T extends object>(options: UseCrudOptions<T>) {
     void load()
   }
 
+  /**
+   * 导出用的查询条件。
+   *
+   * 与列表条件一致，但**去掉 pageNum / pageSize**、丢掉空值：
+   * 导出的是「符合条件的所有数据」而不是当前页，带上分页参数
+   * 会让人以为导出受当前页限制（后端其实也不读这两个参数）。
+   */
+  function exportQuery(): Record<string, QueryValue> {
+    const result: Record<string, QueryValue> = {}
+    for (const [key, value] of Object.entries(query)) {
+      if (key === 'pageNum' || key === 'pageSize') continue
+      if (value === undefined || value === '') continue
+      result[key] = value
+    }
+    return result
+  }
+
+  /** 导出当前查询结果为 Excel */
+  async function exportData(): Promise<void> {
+    if (!api.exportFile) {
+      ElMessage.warning(`${resourceName}不支持导出`)
+      return
+    }
+
+    exporting.value = true
+    try {
+      const blob = await api.exportFile(exportQuery())
+      saveBlobAsFile(blob, buildExportFilename(resourceName))
+      ElMessage.success('导出成功')
+    } catch (error) {
+      notifyError(error, '导出失败')
+    } finally {
+      exporting.value = false
+    }
+  }
+
+  /** 下载导入模板 */
+  async function downloadTemplate(): Promise<void> {
+    if (!api.downloadTemplate) {
+      ElMessage.warning(`${resourceName}不支持导入`)
+      return
+    }
+
+    try {
+      const blob = await api.downloadTemplate()
+      saveBlobAsFile(blob, buildExportFilename(`${resourceName}导入模板`))
+    } catch (error) {
+      notifyError(error, '模板下载失败')
+    }
+  }
+
+  /**
+   * 导入 Excel。
+   *
+   * 成功返回后端给的文案（如「导入成功 3 条」），由调用方决定怎么展示；
+   * 失败返回 null 并已给出错误提示 —— 让调用方只需处理「拿到文案」这一种情况。
+   */
+  async function importData(file: File, updateSupport: boolean): Promise<string | null> {
+    if (!api.importFile) {
+      ElMessage.warning(`${resourceName}不支持导入`)
+      return null
+    }
+
+    importing.value = true
+    try {
+      const message = await api.importFile(file, updateSupport)
+      // 导入会改动数据，列表要重新拉，否则用户看到的还是旧数据
+      await load()
+      return message
+    } catch (error) {
+      notifyError(error, '导入失败')
+      return null
+    } finally {
+      importing.value = false
+    }
+  }
+
   return {
     // 状态
     loading,
     submitting,
+    exporting,
+    importing,
     list,
     total,
     selectedIds,
     query,
     dialog,
     form,
+    // 能力
+    canExport,
+    canImport,
     // 行为
     load,
     search,
@@ -245,5 +335,8 @@ export function useCrud<T extends object>(options: UseCrudOptions<T>) {
     remove,
     handleSizeChange,
     handleCurrentChange,
+    exportData,
+    downloadTemplate,
+    importData,
   }
 }

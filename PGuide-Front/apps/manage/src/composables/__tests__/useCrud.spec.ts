@@ -1,5 +1,5 @@
 import type * as ElementPlus from 'element-plus/es'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CrudApi } from '@/api'
 
 /**
@@ -41,20 +41,45 @@ interface Row extends Record<string, unknown> {
   status?: string
 }
 
-function makeApi(rows: Row[] = []) {
+/**
+ * 带 mock 能力的 CrudApi。
+ *
+ * 交叉类型是必要的：`CrudApi<Row>` 的方法是普通函数类型，
+ * 而测试要调 `.mockResolvedValue()`；直接写 `A & B | A` 会被化简掉。
+ */
+type MockCrudApi = {
+  list: ReturnType<typeof vi.fn>
+  get: ReturnType<typeof vi.fn>
+  add: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  remove: ReturnType<typeof vi.fn>
+}
+
+/** 带导出/导入的接口（对应 createCrudApi 生成的对象） */
+type MockFileApi = {
+  exportFile: ReturnType<typeof vi.fn>
+  importFile: ReturnType<typeof vi.fn>
+  downloadTemplate: ReturnType<typeof vi.fn>
+}
+
+function makeApi(rows: Row[] = []): MockCrudApi & CrudApi<Row> {
   return {
     list: vi.fn().mockResolvedValue({ total: rows.length, rows }),
     get: vi.fn().mockResolvedValue({ id: 1, name: '详情名称' }),
     add: vi.fn().mockResolvedValue(undefined),
     update: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
-  } as unknown as CrudApi<Row> & {
-    list: ReturnType<typeof vi.fn>
-    get: ReturnType<typeof vi.fn>
-    add: ReturnType<typeof vi.fn>
-    update: ReturnType<typeof vi.fn>
-    remove: ReturnType<typeof vi.fn>
-  }
+  } as unknown as MockCrudApi & CrudApi<Row>
+}
+
+/** 额外带 export / import 能力的接口（如 /system/user） */
+function makeFileApi(rows: Row[] = []): MockCrudApi & MockFileApi & CrudApi<Row> {
+  return {
+    ...makeApi(rows),
+    exportFile: vi.fn().mockResolvedValue(new Blob(['xlsx'], { type: 'application/vnd.ms-excel' })),
+    importFile: vi.fn().mockResolvedValue('导入成功 2 条'),
+    downloadTemplate: vi.fn().mockResolvedValue(new Blob(['tpl'])),
+  } as unknown as MockCrudApi & MockFileApi & CrudApi<Row>
 }
 
 describe('useCrud', () => {
@@ -288,5 +313,153 @@ describe('useCrud', () => {
     await crud.load()
 
     expect(messageError).toHaveBeenCalledWith('网络断了')
+  })
+})
+
+describe('useCrud 导出与导入', () => {
+  const createObjectURL = vi.fn(() => 'blob:mock-url')
+  let clickSpy: ReturnType<typeof vi.spyOn>
+
+  /**
+   * 抓取真正被点的那次下载的文件名。
+   *
+   * 返回值是个读取器而不是字符串：`click` 是**稍后**才发生的，
+   * 直接返回变量会在点击前就读到空串。
+   */
+  function filenameCapture(): () => string {
+    let name = ''
+    clickSpy.mockImplementation(function (this: HTMLAnchorElement) {
+      name = this.download
+    })
+    return () => name
+  }
+
+  beforeEach(() => {
+    messageSuccess.mockReset()
+    messageError.mockReset()
+    messageWarning.mockReset()
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = vi.fn()
+    createObjectURL.mockClear()
+    clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('canExport / canImport 看接口有没有对应能力，而不是看页面配置', () => {
+    const plain = useCrud<Row>({ api: makeApi(), idKey: 'id', resourceName: '菜单' })
+    expect(plain.canExport.value).toBe(false)
+    expect(plain.canImport.value).toBe(false)
+
+    const full = useCrud<Row>({ api: makeFileApi(), idKey: 'id', resourceName: '用户' })
+    expect(full.canExport.value).toBe(true)
+    expect(full.canImport.value).toBe(true)
+  })
+
+  it('导出：用当前查询条件，但**不带分页参数**（导出的是全部命中数据）', async () => {
+    const api = makeFileApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '项目' })
+    crud.query.name = '甲'
+    crud.query.pageNum = 3
+    crud.query.pageSize = 20
+
+    await crud.exportData()
+
+    expect(api.exportFile).toHaveBeenCalledWith({ name: '甲' })
+    expect(messageSuccess).toHaveBeenCalledWith('导出成功')
+    expect(crud.exporting.value).toBe(false)
+  })
+
+  it('导出：空条件不带过去（空串在后端会成为多余的过滤条件）', async () => {
+    const api = makeFileApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '项目' })
+    crud.query.name = ''
+    crud.query.status = '0'
+
+    await crud.exportData()
+
+    expect(api.exportFile).toHaveBeenCalledWith({ status: '0' })
+  })
+
+  it('导出：文件名是「资源名_时间戳.xlsx」', async () => {
+    const api = makeFileApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '用户' })
+    const readName = filenameCapture()
+
+    await crud.exportData()
+
+    expect(readName()).toMatch(/^用户_\d{14}\.xlsx$/)
+    expect(createObjectURL).toHaveBeenCalled()
+  })
+
+  it('导出：接口没有导出能力时只提示，不报错', async () => {
+    const api = makeApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '菜单' })
+
+    await crud.exportData()
+
+    expect(messageWarning).toHaveBeenCalledWith('菜单不支持导出')
+    expect(createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('导出失败：给出提示，不把异常抛给调用方', async () => {
+    const api = makeFileApi()
+    api.exportFile.mockRejectedValue(new RuoYiError(500, '导出数据量过大'))
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '用户' })
+
+    await expect(crud.exportData()).resolves.toBeUndefined()
+
+    expect(messageError).toHaveBeenCalledWith('导出数据量过大')
+    expect(crud.exporting.value).toBe(false)
+  })
+
+  it('下载模板：保存成「资源名导入模板_时间戳.xlsx」', async () => {
+    const api = makeFileApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '用户' })
+    const readName = filenameCapture()
+
+    await crud.downloadTemplate()
+
+    expect(api.downloadTemplate).toHaveBeenCalledTimes(1)
+    expect(readName()).toMatch(/^用户导入模板_\d{14}\.xlsx$/)
+  })
+
+  it('导入成功：返回后端文案并刷新列表', async () => {
+    const api = makeFileApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '用户' })
+    const file = new File(['x'], 'users.xlsx')
+
+    const message = await crud.importData(file, true)
+
+    expect(api.importFile).toHaveBeenCalledWith(file, true)
+    expect(message).toBe('导入成功 2 条')
+    // 导入改了数据，列表必须重新拉
+    expect(api.list).toHaveBeenCalled()
+    expect(crud.importing.value).toBe(false)
+  })
+
+  it('导入失败：返回 null 并提示，弹窗由调用方决定是否关闭', async () => {
+    const api = makeFileApi()
+    api.importFile.mockRejectedValue(new RuoYiError(500, '第 3 行手机号格式错误'))
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '用户' })
+
+    const message = await crud.importData(new File(['x'], 'users.xlsx'), false)
+
+    expect(message).toBeNull()
+    expect(messageError).toHaveBeenCalledWith('第 3 行手机号格式错误')
+    // 失败不刷新列表
+    expect(api.list).not.toHaveBeenCalled()
+  })
+
+  it('导入：接口不支持时返回 null 并提示', async () => {
+    const api = makeApi()
+    const crud = useCrud<Row>({ api, idKey: 'id', resourceName: '项目' })
+
+    const message = await crud.importData(new File(['x'], 'a.xlsx'), false)
+
+    expect(message).toBeNull()
+    expect(messageWarning).toHaveBeenCalledWith('项目不支持导入')
   })
 })
