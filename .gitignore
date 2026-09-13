@@ -90,3 +90,4 @@ pnpm-debug.log*
 
 #忽略配置文件
 *.application.yml
+/.workbuddy/
