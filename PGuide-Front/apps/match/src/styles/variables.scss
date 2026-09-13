@@ -1,0 +1,51 @@
+/**
+ * 设计令牌（CSS 自定义属性）。
+ *
+ * 老工程完全没有变量概念，颜色/尺寸全是散落的字面量
+ * （甚至出现过 `background-color: write` 这种拼写错误却没人发现，
+ * 因为字符串拼错在 JS 直改 style 时不会报错）。
+ * 集中定义后，改主题只需要动这一个文件。
+ */
+
+:root {
+  // ---- 品牌色 ----
+  --pg-color-primary: #409eff;
+  --pg-color-primary-light: #79bbff;
+  --pg-color-success: #67c23a;
+  --pg-color-warning: #e6a23c;
+  --pg-color-danger: #f56c6c;
+  --pg-color-info: #909399;
+
+  // ---- 文本 ----
+  --pg-text-primary: #303133;
+  --pg-text-regular: #606266;
+  --pg-text-secondary: #909399;
+  --pg-text-placeholder: #c0c4cc;
+
+  // ---- 背景 ----
+  --pg-bg-page: #ffffff;
+  --pg-bg-gradient-from: #f5fcf4;
+  --pg-bg-gradient-to: #ffffff;
+  --pg-bg-card: #ffffff;
+  --pg-bg-hover: #f5f7fa;
+
+  // ---- 边框 ----
+  --pg-border-color: #e4e7ed;
+  --pg-border-radius: 8px;
+  --pg-border-radius-sm: 4px;
+
+  // ---- 间距 ----
+  --pg-spacing-xs: 4px;
+  --pg-spacing-sm: 8px;
+  --pg-spacing-md: 16px;
+  --pg-spacing-lg: 24px;
+  --pg-spacing-xl: 32px;
+
+  // ---- 布局 ----
+  --pg-header-height: 64px;
+  --pg-content-max-width: 1280px;
+
+  // ---- 阴影 ----
+  --pg-shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --pg-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.1);
+}

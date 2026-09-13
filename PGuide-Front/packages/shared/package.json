@@ -1,0 +1,16 @@
+{
+  "name": "@pguide/shared",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "项导前端共享层：类型、常量、通用工具（不含业务）",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

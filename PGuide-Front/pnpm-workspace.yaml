@@ -1,0 +1,46 @@
+packages:
+  # 新的 Vue3 工程。apps/* 是应用，packages/* 是被复用的库。
+  - 'apps/*'
+  - 'packages/*'
+
+  # 说明：PGuide-Front 下还留着三个 Vue2 老工程
+  # （pguide-auth-ui / pguide-match-ui / pguide-ui-demo），
+  # 故意不列进来 —— 它们各自维护自己的 node_modules，
+  # 纳入 workspace 会引入互相冲突的 vue2/vue3 依赖。
+
+# pnpm 默认**拦截**依赖的 postinstall 脚本（ERR_PNPM_IGNORED_BUILDS）。
+# 下面这些必须放行，否则工具链装不起来：
+#
+#   esbuild          —— 下载对应平台的二进制，Vite / Vitest 的转译核心。
+#                       不放行的话 vite build 会报 "You installed esbuild for
+#                       another platform than the one you're currently using"
+#   @parcel/watcher  —— 原生文件监听，vite dev 的 HMR 依赖它
+#
+# 放行原则：只放行「确实需要下载/编译平台原生产物」的包。
+# 不要图省事全开（pnpm 也没有提供一键全开的开关，这是有意的）。
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+
+# ---------------------------------------------------------------------------
+# 供应链保护与 sass 的版本锁定
+#
+# pnpm 12 默认开启 `minimumReleaseAge`（新发布的包 24 小时内不允许安装），
+# 用来防住「作者账号被盗后立刻发恶意版本」这类攻击。
+#
+# SAS 的 1.104.1 发布于 2026-09-12，正好落在窗口内被拒，导致
+# `pnpm install` 报：
+#   ERR_PNPM_META_FETCH_FAIL / lockfile contains entries that the active
+#   policies reject ... sass-embedded@1.104.1 was published at ..., within
+#   the minimumReleaseAge cutoff
+#
+# 处理方式：**精确锁定到窗口外的 1.104.0**，而不是关掉策略。
+# 下面的 overrides 是为了把传递依赖里的 sass / sass-embedded 也一起压到该版本
+# （sass 本身并不是直接依赖，是工具链间接引进来的）。
+#
+# 什么时候可以去掉这里：等 1.104.1 发布满 24 小时后，
+# 把两条 overrides 删掉、package.json 里的版本改回 ^1.104.1 即可。
+# ---------------------------------------------------------------------------
+overrides:
+  sass: 1.104.0
+  sass-embedded: 1.104.0

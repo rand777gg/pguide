@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.app.json" },
+    // 测试文件不在 tsconfig.app.json 里（那个显式排除了 src/**/__tests__/*），
+    // 需要单独一份配置，否则 ESLint 的类型化检查会报
+    // "was not found by the project service"。
+    { "path": "./tsconfig.vitest.json" }
+  ]
+}

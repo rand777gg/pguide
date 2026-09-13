@@ -1,0 +1,20 @@
+{
+  "name": "@pguide/api",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "项导前端 API 层：axios 客户端 + 按业务域划分的接口定义",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pguide/shared": "workspace:*",
+    "axios": "^1.20.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
