@@ -13,8 +13,13 @@ export interface UserQuery {
   deptId?: number
 }
 
-/** 供 CrudPage 复用的 CRUD 接口 */
-export const userCrudApi = createCrudApi<SysUser>('/system/user')
+/**
+ * 供 CrudPage 复用的 CRUD 接口。
+ *
+ * 用户是**唯一**支持导入的模块：`SysUserController` 有 `/importData` 与
+ * `/importTemplate`（权限点 `system:user:import`），其它 Controller 只有导出。
+ */
+export const userCrudApi = createCrudApi<SysUser>('/system/user', { importable: true })
 
 /**
  * 左侧部门树。

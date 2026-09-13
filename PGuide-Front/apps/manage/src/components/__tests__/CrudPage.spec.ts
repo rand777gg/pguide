@@ -1,6 +1,6 @@
 import type * as ElementPlus from 'element-plus/es'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { CrudApi } from '@/api'
 import type { CrudColumn, CrudFormField } from '@/composables/crud-config'
 
@@ -62,6 +62,22 @@ function makeApi(rows: Row[] = ROWS): MockCrudApi & CrudApi<Row> {
     update: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
   } as unknown as MockCrudApi & CrudApi<Row>
+}
+
+/** 额外带导出/导入能力的接口（对应 createCrudApi 生成的对象，如 /system/user） */
+type MockFileApi = {
+  exportFile: ReturnType<typeof vi.fn>
+  importFile: ReturnType<typeof vi.fn>
+  downloadTemplate: ReturnType<typeof vi.fn>
+}
+
+function makeFileApi(rows: Row[] = ROWS): MockCrudApi & MockFileApi & CrudApi<Row> {
+  return {
+    ...makeApi(rows),
+    exportFile: vi.fn().mockResolvedValue(new Blob(['xlsx'], { type: 'application/vnd.ms-excel' })),
+    importFile: vi.fn().mockResolvedValue('导入成功 2 条'),
+    downloadTemplate: vi.fn().mockResolvedValue(new Blob(['tpl'])),
+  } as unknown as MockCrudApi & MockFileApi & CrudApi<Row>
 }
 
 const COLUMNS: CrudColumn<Row>[] = [
@@ -300,5 +316,102 @@ describe('CrudPage 渲染', () => {
 
     expect(wrapper.find('.crud-page__search').exists()).toBe(true)
     expect(wrapper.find('.crud-page__toolbar').exists()).toBe(true)
+  })
+})
+
+describe('CrudPage 导出与导入', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // el-dialog 是 append-to-body 的：上一个用例挂载的弹窗会留在 document.body 里，
+    // 不清掉的话 querySelector('.el-dialog') 查到的是别人家的弹窗
+    document.body.innerHTML = ''
+    // jsdom 不实现 objectURL，saveBlobAsFile 依赖它
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function toolbarButton(wrapper: VueWrapper, text: string) {
+    return wrapper.findAll('.crud-page__toolbar button').find((b) => b.text().includes(text))
+  }
+
+  it('接口带导出能力时渲染「导出」按钮', async () => {
+    const { wrapper, api } = mountPage({}, makeFileApi())
+    await flushPromises()
+
+    expect(toolbarButton(wrapper, '导出')).toBeDefined()
+    // 只是渲染，不该顺手导出一份
+    expect(api.exportFile).not.toHaveBeenCalled()
+  })
+
+  it('接口没有导出能力（菜单、部门）时不渲染「导出」', async () => {
+    const { wrapper } = mountPage()
+    await flushPromises()
+
+    expect(toolbarButton(wrapper, '导出')).toBeUndefined()
+  })
+
+  it('只读页面也保留导出（操作日志这类只读页恰恰最需要导出）', async () => {
+    const { wrapper } = mountPage({ readonly: true }, makeFileApi())
+    await flushPromises()
+
+    expect(toolbarButton(wrapper, '导出')).toBeDefined()
+    // 但新增/删除仍然藏起来
+    expect(toolbarButton(wrapper, '新增')).toBeUndefined()
+    expect(toolbarButton(wrapper, '删除')).toBeUndefined()
+  })
+
+  it('点「导出」把当前条件交给接口，并触发下载', async () => {
+    const { wrapper, api } = mountPage({}, makeFileApi())
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as { crud: { query: Record<string, unknown> } }
+    vm.crud.query.name = '甲'
+    await flushPromises()
+
+    await toolbarButton(wrapper, '导出')!.trigger('click')
+    await flushPromises()
+
+    expect(api.exportFile).toHaveBeenCalledWith({ name: '甲' })
+    expect(URL.createObjectURL).toHaveBeenCalled()
+  })
+
+  it('没有导入能力时「导入」按钮不出现（业务模块都没有 /importData）', async () => {
+    const { wrapper } = mountPage()
+    await flushPromises()
+
+    expect(toolbarButton(wrapper, '导入')).toBeUndefined()
+  })
+
+  it('支持导入的模块：点「导入」打开弹窗，弹窗里有模板下载入口', async () => {
+    const { wrapper } = mountPage({}, makeFileApi())
+    await flushPromises()
+
+    await toolbarButton(wrapper, '导入')!.trigger('click')
+    await flushPromises()
+
+    const dialog = document.querySelector('.el-dialog')
+    expect(dialog).not.toBeNull()
+    expect(dialog!.textContent).toContain('导入项目')
+    expect(dialog!.textContent).toContain('下载模板')
+    expect(dialog!.textContent).toContain('是否更新已经存在的项目数据')
+  })
+
+  it('未选文件时弹窗的「确定」是禁用的（避免发个空文件过去）', async () => {
+    const { wrapper } = mountPage({}, makeFileApi())
+    await flushPromises()
+
+    await toolbarButton(wrapper, '导入')!.trigger('click')
+    await flushPromises()
+
+    const confirm = Array.from(document.querySelectorAll('.el-dialog button')).find((b) =>
+      b.textContent?.includes('确定'),
+    )
+    expect(confirm).toBeDefined()
+    expect((confirm as HTMLButtonElement).disabled).toBe(true)
   })
 })

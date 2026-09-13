@@ -13,6 +13,11 @@
 -- 如果路径写错，新版前端会跳到占位页并明确提示（老版是静默白屏）。
 --
 -- menu_id 从 2000 开始，避开 RuoYi 基线的 1~117 / 500~501 / 1000~1060。
+--
+-- 全部用 `INSERT IGNORE`，脚本**可以重复执行**：docker 的 init 脚本只在数据卷
+-- 首次创建时跑一次，已经有数据的库要手工补 —— 手工补时若不忽略主键冲突，
+-- 第一条就报 Duplicate entry 并中断整段。IGNORE 只跳过已存在的行，
+-- 不会覆盖别人在界面上改过的菜单。
 -- ============================================================
 
 SET NAMES utf8mb4;
@@ -21,7 +26,7 @@ USE `pguide_manage`;
 -- ------------------------------------------------------------
 -- 一级目录
 -- ------------------------------------------------------------
-INSERT INTO `sys_menu`
+INSERT IGNORE INTO `sys_menu`
   (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `is_frame`, `is_cache`,
    `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `remark`)
 VALUES
@@ -30,7 +35,7 @@ VALUES
 -- ------------------------------------------------------------
 -- 二级菜单
 -- ------------------------------------------------------------
-INSERT INTO `sys_menu`
+INSERT IGNORE INTO `sys_menu`
   (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `is_frame`, `is_cache`,
    `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `remark`)
 VALUES
@@ -48,7 +53,7 @@ VALUES
 -- 但给其它角色分配权限时需要有这些细粒度权限点，所以一并补上。
 -- setup 表里 sys_menu 不含 role 关联，这里也不动 sys_role_menu。
 -- ------------------------------------------------------------
-INSERT INTO `sys_menu`
+INSERT IGNORE INTO `sys_menu`
   (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `is_frame`, `is_cache`,
    `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`)
 VALUES
@@ -82,3 +87,27 @@ VALUES
   (2062, '教师新增', 2060, 2, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:add',    '#', 'admin'),
   (2063, '教师修改', 2060, 3, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:edit',   '#', 'admin'),
   (2064, '教师删除', 2060, 4, '', NULL, 1, 0, 'F', '0', '0', 'project:info:teacher:remove', '#', 'admin');
+
+-- ------------------------------------------------------------
+-- 导出按钮权限
+--
+-- 每个业务 Controller 都有 `POST {base}/export`，@PreAuthorize 用的是
+-- 同一个前缀 + `:export`；管理端 CrudPage 的「导出」按钮按这个权限点显隐。
+-- 超级管理员有 *:*:*，不加这些行也能导出；加上是为了能给别的角色单独授权。
+--
+-- 注意：`SysMenuController` / `SysDeptController` 没有 /export，
+-- 所以菜单、部门两个页面没有导出按钮，也就没有对应的权限行。
+-- ------------------------------------------------------------
+INSERT IGNORE INTO `sys_menu`
+  (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `is_frame`, `is_cache`,
+   `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`)
+VALUES
+  (2015, '项目导出', 2010, 5, '', NULL, 1, 0, 'F', '0', '0', 'manage:projectinfo:export',    '#', 'admin'),
+  (2025, '招募导出', 2020, 5, '', NULL, 1, 0, 'F', '0', '0', 'manage:recruitinfo:export',    '#', 'admin'),
+  (2035, '竞赛导出', 2030, 5, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:cptinfo:export',     '#', 'admin'),
+  (2045, '学科导出', 2040, 5, '', NULL, 1, 0, 'F', '0', '0', 'cmsmanage:subjectdict:export', '#', 'admin'),
+  -- 学生与教师两个 Controller 的 @PreAuthorize 用的是**同一个**前缀
+  -- （`UsercenterStudentInfoController` / `UsercenterTeacherInfoController`
+  -- 都是 `project:info:*`），所以这两行的权限串相同。
+  (2055, '学生导出', 2050, 5, '', NULL, 1, 0, 'F', '0', '0', 'project:info:export',          '#', 'admin'),
+  (2065, '教师导出', 2060, 5, '', NULL, 1, 0, 'F', '0', '0', 'project:info:export',          '#', 'admin');

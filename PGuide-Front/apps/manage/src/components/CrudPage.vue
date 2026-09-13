@@ -1,5 +1,7 @@
 <script setup lang="ts" generic="T extends object">
-import { Plus, Delete, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Delete, Refresh, Search, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
+import { reactive } from 'vue'
+import { ElMessageBox } from 'element-plus/es'
 import type { CrudApi } from '@/api'
 import { useCrud } from '@/composables/useCrud'
 import type { FormValue, QueryValue } from '@/composables/useCrud'
@@ -112,6 +114,45 @@ async function handleSubmit(): Promise<void> {
   await crud.submit()
 }
 
+/**
+ * 导入弹窗的本地状态。
+ *
+ * 导入是「选文件 → 勾选项 → 确定」三步，和新增/编辑弹窗的字段表单不是一回事，
+ * 所以单独一份状态，不塞进 useCrud 的 dialog。
+ */
+const importDialog = reactive({
+  visible: false,
+  file: null as File | null,
+  updateSupport: false,
+})
+
+function openImport(): void {
+  importDialog.file = null
+  importDialog.updateSupport = false
+  importDialog.visible = true
+}
+
+/** el-upload 的 on-change：只留最后一个文件（:limit="1" 已经限制，这里再兜一层） */
+function handleFileChange(uploadFile: { raw?: File }): void {
+  importDialog.file = uploadFile.raw ?? null
+}
+
+function handleFileRemove(): void {
+  importDialog.file = null
+}
+
+async function handleImport(): Promise<void> {
+  if (!importDialog.file) return
+
+  const message = await crud.importData(importDialog.file, importDialog.updateSupport)
+  if (message === null) return
+
+  importDialog.visible = false
+  // RuoYi 的导入结果是一段多行文案（成功几条、失败几条、失败原因），
+  // 用 alert 展示才看得清，ElMessage 会被截断
+  void ElMessageBox.alert(message, '导入结果', { confirmButtonText: '确定' })
+}
+
 function handleRemoveSelected(): void {
   void crud.remove()
 }
@@ -194,6 +235,31 @@ defineExpose({ crud })
             @click="handleRemoveSelected"
           >
             删除
+          </el-button>
+          <!--
+            导出不受 readonly 影响：操作日志、登录日志这类只读页面
+            恰恰是最需要导出的（列表不允许改，但要能带走分析）。
+          -->
+          <el-button
+            v-if="crud.canExport.value"
+            v-has-permi="perm('export')"
+            type="warning"
+            plain
+            :icon="Download"
+            :loading="crud.exporting.value"
+            @click="crud.exportData()"
+          >
+            导出
+          </el-button>
+          <el-button
+            v-if="crud.canImport.value"
+            v-has-permi="perm('import')"
+            type="info"
+            plain
+            :icon="Upload"
+            @click="openImport"
+          >
+            导入
           </el-button>
           <slot name="toolbar" />
         </div>
@@ -360,6 +426,46 @@ defineExpose({ crud })
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入弹窗（只有配置了 importable 的模块才会打开） -->
+    <el-dialog v-model="importDialog.visible" :title="`导入${resource}`" width="420px" append-to-body>
+      <el-upload
+        drag
+        :auto-upload="false"
+        :limit="1"
+        accept=".xlsx,.xls"
+        :on-change="handleFileChange"
+        :on-remove="handleFileRemove"
+      >
+        <el-icon class="crud-page__upload-icon"><UploadFilled /></el-icon>
+        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+        <template #tip>
+          <div class="el-upload__tip">
+            仅允许导入 xls、xlsx 格式文件。
+            <!-- underline 用 'never' 字符串：Element Plus 2.14 起布尔写法已废弃 -->
+            <el-link type="primary" underline="never" @click="crud.downloadTemplate()">
+              下载模板
+            </el-link>
+          </div>
+        </template>
+      </el-upload>
+
+      <el-checkbox v-model="importDialog.updateSupport" class="crud-page__update-support">
+        是否更新已经存在的{{ resource }}数据
+      </el-checkbox>
+
+      <template #footer>
+        <el-button @click="importDialog.visible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="!importDialog.file"
+          :loading="crud.importing.value"
+          @click="handleImport"
+        >
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -394,6 +500,16 @@ defineExpose({ crud })
   &__pagination {
     margin-top: var(--pg-spacing-md);
     justify-content: flex-end;
+  }
+
+  &__upload-icon {
+    font-size: 48px;
+    color: var(--pg-text-placeholder);
+    margin-bottom: 8px;
+  }
+
+  &__update-support {
+    margin-top: var(--pg-spacing-md);
   }
 }
 </style>

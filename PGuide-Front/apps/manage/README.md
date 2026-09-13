@@ -65,6 +65,7 @@ apps/manage/src/
 ├── stores/                user / permission / app
 ├── utils/
 │   ├── dynamic-route.ts   ★ 菜单树 → vue-router 路由
+│   ├── file.ts            ★ Blob 落盘 + 导出文件名（时间戳）
 │   └── menu-icon.ts       后端图标名 → Element Plus 图标（显式映射表）
 └── views/                 页面（大多只有几十行配置）
 ```
@@ -89,16 +90,21 @@ GET    {base}/{id}          详情
 POST   {base}               新增
 PUT    {base}               修改
 DELETE {base}/{ids}         删除
-权限   {perm}:list|query|add|edit|remove
+POST   {base}/export        导出 Excel（query 参数，返回二进制）
+权限   {perm}:list|query|add|edit|remove|export
 ```
 
 所以一个模块一行：
 
 ```ts
 export const mmsProjectApi = createCrudApi<MmsProjectInfo>('/manage/projectinfo')
+
+// 只有 sys_user 有导入接口，多给一个开关
+export const userCrudApi = createCrudApi<SysUser>('/system/user', { importable: true })
 ```
 
-树形接口（菜单、部门，后端返回拼好的树、不分页）用 `createTreeCrudApi`。
+树形接口（菜单、部门，后端返回拼好的树、不分页）用 `createTreeCrudApi` ——
+它**不带导出**，因为 `SysMenuController` / `SysDeptController` 也没有 `/export`。
 
 ### 2. `useCrud` —— 列表页的全部状态与行为
 
@@ -128,6 +134,32 @@ export const mmsProjectApi = createCrudApi<MmsProjectInfo>('/manage/projectinfo'
 - 完全不是 CRUD 的页面（监控大屏等）→ 正常写
 
 `CrudPage` 提供 `toolbar` / `actions` / `form-extra` 三个插槽应付差异。
+
+### 导出 / 导入是跟着接口走的
+
+`CrudPage` 不靠页面配置决定要不要渲染「导出」「导入」，而是看**接口有没有那个方法**：
+
+| 接口对象 | 导出按钮 | 导入按钮 |
+|---|---|---|
+| `createCrudApi(...)` | 有 | 只有 `{ importable: true }` 时才有（目前只有用户） |
+| `createTreeCrudApi(...)` | 无 | 无 |
+
+这样一来，「菜单页没有导出」这种事实只写在后端一处（`SysMenuController` 没有
+`/export`），前端不用再抄一遍。
+
+四个容易踩的点（都写在代码注释里，这里留个索引）：
+
+1. **导出是 POST + query 参数**，不是 body；和 ruoyi-ui 的 `download()` 一致。
+2. **后端不返回 `Content-Disposition`**（`ExcelUtil` 直接把字节写进响应流），
+   文件名只能前端拼 → `用户_20260213153045.xlsx`，见 `utils/file.ts`。
+3. **导出失败时后端返回 JSON**（状态码可能还是 200）。原样当文件下载，
+   用户会得到一个名字像 Excel、打开报损坏的文件 ——
+   所以 `request.ts` 的 `download()` 会嗅探 content-type，是 JSON 就抛 `RuoYiError`。
+4. **上传不要手写 `Content-Type`**：boundary 由浏览器生成，手写会漏掉，
+   后端报 `Current request is not a multipart request`。
+
+导出走的是**当前查询条件、不带分页参数**（`pageNum` / `pageSize` 会被剔掉），
+也就是「导出全部命中数据」，而不是「导出当前页」。
 
 ---
 
@@ -178,9 +210,10 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 | 学生信息 | `usercenter/student/index` | `project:info:student` |
 | 教师信息 | `usercenter/teacher/index` | `project:info:teacher` |
 
-> 该脚本只在数据卷首次创建时执行。已有数据库要手动导入：
+> 该脚本用 `INSERT IGNORE` 写，**可以重复执行**。docker 的 init 脚本只在数据卷
+> 首次创建时跑一次，已有数据库手工补即可（重复执行不会覆盖你在界面上改过的菜单）：
 > ```bash
-> docker exec -i -e MYSQL_PWD=pguide123 pguide-dev-mysql mysql -uroot \
+> docker exec -i -e MYSQL_PWD=pguide123 pguide-dev-mysql mysql -uroot --default-character-set=utf8mb4 \
 >   < docker/init/95-pguide-manage-menus.sql
 > ```
 
@@ -190,9 +223,11 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 
 ### 已实现（真实接口，完整增删改查）
 
-系统管理：**用户 / 角色 / 菜单（树） / 部门（树） / 字典类型**
+系统管理：**用户（含导入）/ 角色 / 菜单（树） / 部门（树） / 字典类型**
 
 项导业务：**项目管理 / 招募需求 / 竞赛管理 / 学科字典 / 学生信息 / 教师信息**
+
+以上页面都支持**导出 Excel**（菜单、部门除外 —— 后端没有 `/export`）。
 
 ### 未实现（点进去是占位页，会说明缺什么）
 
@@ -208,8 +243,6 @@ RuoYi 的菜单存在 `sys_menu` 表里，`component` 字段写的是**前端组
 
 ### 相对老 ruoyi-ui 未搬的功能
 
-- 列表导出 Excel（后端接口在，前端没接）
-- 导入用户
 - 多标签页（TagsView）与主题设置抽屉
 - 首页的 echarts 统计图（老工程为一个首页引入整个 echarts，1MB+）
 - 角色分配菜单的独立弹窗（简化成了表单字段，`roleApi.getRoleMenuTree` 已备好）
