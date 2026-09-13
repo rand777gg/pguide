@@ -72,8 +72,11 @@ defineSlots<{
    * 插槽给 `load`，自定义按钮改完数据后可以直接刷新列表。
    */
   toolbar?: (props: { load: () => void; selectedIds: Array<number | string> }) => unknown
-  /** 表格右侧的自定义操作列 */
-  actions?: (props: { row: T }) => unknown
+  /**
+   * 表格右侧的自定义操作列。
+   * 也给 `load` —— 像「账户解锁」这类操作做完就该刷新列表。
+   */
+  actions?: (props: { row: T; load: () => void }) => unknown
   /** 弹窗表单底部的自定义内容 */
   'form-extra'?: (props: { form: Record<string, unknown> }) => unknown
 }>()
@@ -357,7 +360,7 @@ defineExpose({ crud })
             >
               删除
             </el-button>
-            <slot name="actions" :row="row" />
+            <slot name="actions" :row="row" :load="crud.load" />
           </template>
         </el-table-column>
       </el-table>
