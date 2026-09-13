@@ -50,23 +50,38 @@ describe('isExternalLink', () => {
 
 describe('resolveComponent', () => {
   it('RuoYi 的特殊 component 值映射到布局组件，不算缺失', () => {
-    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(resolveComponent('Layout', '/x').missing).toBe(false)
     expect(resolveComponent('ParentView', '/x').missing).toBe(false)
     expect(resolveComponent('InnerLink', '/x').missing).toBe(false)
-    warn.mockRestore()
   })
 
-  it('找不到的组件会走兜底并打日志 —— 不静默白屏', () => {
-    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
-
+  it('找不到的组件会走兜底（不静默白屏），并把缺失的组件路径带出来', () => {
     const result = resolveComponent('not/exist/page', '/broken')
 
     expect(result.missing).toBe(true)
-    // 关键：老 ruoyi-ui 这里是静默返回 undefined，页面白屏且没有线索
-    expect(warn).toHaveBeenCalled()
-    expect(String(warn.mock.calls[0]?.[0])).toContain('not/exist/page')
+    expect(result.missingComponent).toBe('not/exist/page')
+    // 不在已知未实现名单里 → 会被当成「配置写错了」报 error（见汇总的测试）
+    expect(result.knownUnimplemented).toBe(false)
+  })
 
+  it('已知未实现的菜单（如代码生成器）标记出来，不算配置错误', () => {
+    const result = resolveComponent('tool/gen/index', '/tool/gen')
+
+    expect(result.missing).toBe(true)
+    expect(result.knownUnimplemented).toBe(true)
+  })
+
+  it('解析本身不打日志 —— 逐条打会把控制台刷红（汇总交给 buildRoutes）', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    resolveComponent('not/exist/page', '/broken')
+    resolveComponent('tool/gen/index', '/tool/gen')
+
+    expect(error).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+
+    error.mockRestore()
     warn.mockRestore()
   })
 })
@@ -107,20 +122,124 @@ describe('buildRoutes', () => {
   })
 
   it('子菜单的 component 能解析到真实组件文件（说明 glob 路径对得上）', () => {
-    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
-
     // 'mms/project/index' 对应 apps/manage/src/views/mms/project/index.vue
     const result = resolveComponent('mms/project/index', '/pguide/project')
 
     expect(result.missing).toBe(false)
-    expect(warn).not.toHaveBeenCalled()
-
-    warn.mockRestore()
   })
 
   it('空路径的节点被跳过，不产生脏路由', () => {
     const routes = buildRoutes([{ path: '', component: undefined } as DynamicRoute])
     expect(routes).toHaveLength(0)
+  })
+})
+
+/**
+ * 组件缺失的日志策略。
+ *
+ * 背景：每次登录都会拉整棵菜单树，未实现的菜单逐条 `console.error` 会把控制台
+ * 刷成一片红 —— 实际收到过「登录报错」的反馈，其实登录是成功的，
+ * 那九条只是「这些菜单还没做」。
+ *
+ * 现在的规则：
+ *   - 已知未实现（KNOWN_UNIMPLEMENTED）→ 汇总成一条 warn
+ *   - 其它（多半是 sys_menu 写错了）→ 汇总成一条 error
+ *   - 全都解析得到 → 一条都不打
+ */
+describe('组件缺失时的日志', () => {
+  function menuOf(component: string, path: string): DynamicRoute {
+    return {
+      name: 'X',
+      path,
+      component,
+      meta: { title: '某菜单', noCache: false, link: null },
+    }
+  }
+
+  it('已知未实现的菜单只汇总成一条 warn，不报 error', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    buildRoutes([
+      menuOf('tool/gen/index', '/tool/gen'),
+      menuOf('monitor/job/index', '/monitor/job'),
+      menuOf('monitor/online/index', '/monitor/online'),
+    ])
+
+    expect(error).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledTimes(1)
+    const message = String(warn.mock.calls[0]?.[0])
+    expect(message).toContain('3 个菜单尚未实现')
+    expect(message).toContain('/tool/gen')
+    expect(message).toContain('/monitor/job')
+
+    error.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('配错的路径汇总成一条 error，并把路由与组件路径都列出来', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    buildRoutes([menuOf('system/usre/index', '/system/usre')])
+
+    expect(warn).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledTimes(1)
+    const message = String(error.mock.calls[0]?.[0])
+    expect(message).toContain('/system/usre')
+    expect(message).toContain('views/system/usre/index.vue')
+
+    error.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('两类混在一起时各汇总一条，不会逐条刷屏', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    buildRoutes([
+      menuOf('tool/gen/index', '/tool/gen'),
+      menuOf('tool/build/index', '/tool/build'),
+      menuOf('nope/a/index', '/nope/a'),
+      menuOf('nope/b/index', '/nope/b'),
+    ])
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('2 个菜单尚未实现')
+    expect(String(error.mock.calls[0]?.[0])).toContain('2 个菜单指向的组件不存在')
+
+    error.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('全部解析得到时一条日志都不打（正常登录控制台应该是干净的）', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    buildRoutes([REAL_DIRECTORY])
+
+    expect(error).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+
+    error.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('缺失信息写到路由 meta 上，占位页据此显示不同文案', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const [known] = buildRoutes([menuOf('tool/gen/index', '/tool/gen')])
+    const [unknown] = buildRoutes([menuOf('system/usre/index', '/system/usre')])
+
+    expect(known!.meta?.unimplemented).toBe(true)
+    expect(known!.meta?.missingComponent).toBe('tool/gen/index')
+    expect(unknown!.meta?.unimplemented).toBe(false)
+    expect(unknown!.meta?.missingComponent).toBe('system/usre/index')
+
+    error.mockRestore()
+    warn.mockRestore()
   })
 })
 
@@ -144,13 +263,10 @@ describe('viewName 与组件命名', () => {
   })
 
   it('真实页面在解析时就带上组件名', () => {
-    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
-
     const result = resolveComponent('system/user/index', '/system/user')
 
     expect(result.missing).toBe(false)
     expect(result.name).toBe('SystemUser')
-    warn.mockRestore()
   })
 
   it('懒加载出来的组件被注入了 name（否则 keep-alive 匹配不上）', async () => {

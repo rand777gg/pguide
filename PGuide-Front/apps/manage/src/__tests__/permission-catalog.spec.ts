@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { KNOWN_UNIMPLEMENTED } from '@/utils/dynamic-route'
 
 /**
  * 权限串与菜单配置的一致性检查（前端 ↔ 后端 ↔ 菜单 SQL）。
@@ -61,6 +62,8 @@ const APP_ROOT = existsSync(join(process.cwd(), 'src/views'))
 /** PGuide-Manage 后端（RuoYi 单体：系统管理 + pguide 业务模块都在这里） */
 const BACKEND_SRC = join(REPO_ROOT, 'PGuide-Manage/PGuide-Manage')
 const MENU_SQL = join(REPO_ROOT, 'docker/init/95-pguide-manage-menus.sql')
+/** RuoYi 基线菜单（系统管理 / 系统监控 / 系统工具） */
+const BASELINE_MENU_SQL = join(REPO_ROOT, 'docker/init/20-ruoyi-vue-3.8.6-baseline.sql')
 
 /** 后端源码在不在（不在就跳过跨仓库的那几条用例） */
 const hasBackend = existsSync(BACKEND_SRC)
@@ -175,5 +178,50 @@ describe('菜单 SQL 的组件路径都存在', () => {
     )
 
     expect(missing).toEqual([])
+  })
+})
+
+/**
+ * RuoYi 基线的菜单（系统管理 / 系统监控 / 系统工具）也要对得上。
+ *
+ * 规则：每条菜单的 component 要么有真实页面，要么在 `KNOWN_UNIMPLEMENTED` 里
+ * 明确登记为「有意没做」。这样两件事都不会漏：
+ *
+ *   - 新增菜单时把 component 写错 → 立即失败（否则只是点进去看到占位页，
+ *     而且权限、路由都是好的，很容易没人发现）
+ *   - 实现了某个页面却忘了从 KNOWN_UNIMPLEMENTED 里删 → 不算失败，
+ *     因为该文件已经存在（登记表只是「日志分级」用的）
+ *
+ * 这条也顺带保证了一件事：真实登录时打出来的「尚未实现」清单是**完整且准确**的，
+ * 不会出现「明明没实现却没登记」→ 被当成配置错误报红的情况。
+ */
+describe('RuoYi 基线菜单的组件路径', () => {
+  /** 从基线 SQL 里抽 C 类型菜单的 component（形如 system/user/index） */
+  function baselineComponents(): string[] {
+    const source = readFileSync(BASELINE_MENU_SQL, 'utf8')
+    return collect(source, /'((?:system|monitor|tool)\/[\w/]+)'/g)
+  }
+
+  it('每条菜单要么有真实页面，要么已登记为「有意未实现」', () => {
+    const components = baselineComponents()
+    // 基线里 system/monitor/tool 三组菜单，数量不该低于 15
+    expect(components.length).toBeGreaterThanOrEqual(15)
+
+    const unresolved = components.filter(
+      (component) =>
+        !existsSync(join(APP_ROOT, 'src/views', `${component}.vue`)) &&
+        !KNOWN_UNIMPLEMENTED.includes(component),
+    )
+
+    expect(unresolved).toEqual([])
+  })
+
+  it('登记表里没有多余的路径（实现了就该删掉，否则日志会误导）', () => {
+    // 只是提示性约束：登记了但文件已存在的，说明该更新登记表了
+    const stale = KNOWN_UNIMPLEMENTED.filter((component) =>
+      existsSync(join(APP_ROOT, 'src/views', `${component}.vue`)),
+    )
+
+    expect(stale).toEqual([])
   })
 })
