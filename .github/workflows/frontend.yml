@@ -1,0 +1,94 @@
+# ============================================================
+# 前端 CI：组队中心 / 鉴权中心 / 共享包
+#
+# 四道门禁，任何一道不过就失败：
+#   lint        静态检查（0 warning 才算过）
+#   type-check  vue-tsc，覆盖 .vue 模板里的类型
+#   test        Vitest（含页面渲染冒烟测试）
+#   build       真实打包
+#
+# 只在相关文件变动时触发：改 dev-manual 也跑一遍，因为规范文档里
+# 写了命令，如果命令本身失效了应该被发现。
+# ============================================================
+
+name: frontend
+
+on:
+  push:
+    branches: [main, 'dev-*', 'feat-*', 'fix-*', 'ci-*', 'test-*']
+    paths:
+      - 'PGuide-Front/**'
+      - 'dev-manual/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'PGuide-Front/**'
+      - 'dev-manual/**'
+      - '.github/workflows/frontend.yml'
+
+# 同一个分支连续推送时取消上一次未跑完的任务
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint / type-check / test / build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        # 前端 monorepo 在这个子目录里
+        working-directory: PGuide-Front
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ⚠️ 必须显式写 version。
+      # pnpm/action-setup 默认从**仓库根目录**的 package.json 读
+      # packageManager 字段，而本仓库根目录没有 package.json
+      # （packageManager 在 PGuide-Front/package.json 里），
+      # 不写 version 会直接报错。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: PGuide-Front/pnpm-lock.yaml
+
+      # --frozen-lockfile：lockfile 与 package.json 不一致时直接失败，
+      # 避免 CI 上悄悄装出和本地不同的依赖。
+      #
+      # 注意 pnpm 12 会顺带校验供应链策略（minimumReleaseAge），
+      # 所以 package.json 里那些「精确锁定到窗口外版本」的依赖
+      # （如 sass-embedded 1.104.0）不能随便改回 ^ 范围，
+      # 否则 CI 会因为「包太新」而拒绝安装。详见 pnpm-workspace.yaml 注释。
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: 类型检查
+        run: pnpm type-check
+
+      - name: 单元测试与渲染测试
+        run: pnpm test
+
+      - name: 构建
+        run: pnpm build
+
+      # 产物上传，方便排查构建问题（不是发布）
+      - name: 上传构建产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: |
+            PGuide-Front/apps/match/dist
+            PGuide-Front/apps/auth/dist
+          if-no-files-found: ignore
+          retention-days: 7
